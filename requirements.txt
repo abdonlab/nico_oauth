@@ -1,7 +1,6 @@
-streamlit
+streamlit==1.38.0
 python-dotenv
+google-auth==2.33.0
+google-auth-oauthlib==1.2.1
 requests
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-pyttsx3
+edge-tts==6.1.12
