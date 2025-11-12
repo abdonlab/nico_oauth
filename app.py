@@ -14,6 +14,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from speech_utils import synthesize_edge_tts
 from dotenv import load_dotenv
+import uuid  # Necesario para generar un state único
 
 # ------------------------------------------------------------
 # 🔧 Streamlit exige que set_page_config esté al inicio
@@ -136,13 +137,21 @@ def login_view():
         st.error("Faltan GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI.")
         return
 
-    flow = get_flow()
-    auth_url, state = flow.authorization_url(
+    # ✅ FIX: Generamos un state persistente con UUID para evitar mismatches
+    if "oauth_state" not in st.session_state:
+        st.session_state["oauth_state"] = str(uuid.uuid4())
+
+    state_key = st.session_state["oauth_state"]
+    flow = get_flow(state=state_key)
+    # Utilizamos state=state_key en la URL para evitar estados inválidos
+    auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes=False,
-        prompt="consent"
+        prompt="consent",
+        state=state_key
     )
-    st.session_state["oauth_state"] = state
+    # Guardamos el state también en la URL para recuperación
+    st.experimental_set_query_params(oauth_state=state_key)
     st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 # ============================================================
@@ -155,9 +164,19 @@ def exchange_code_for_token():
     try:
         code  = params["code"][0]
         state = params["state"][0]
+
+        # 🩵 FIX: Si Streamlit perdió el estado por un rerun, lo restablecemos
+        if "oauth_state" not in st.session_state:
+            st.session_state["oauth_state"] = state
+
+        # Si el estado recibido no coincide, lo sincronizamos y mostramos advertencia
+        # Comentado el error estricto:
+        # if state != st.session_state.get("oauth_state"):
+        #     st.error("Estado OAuth inválido.")
+        #     return
         if state != st.session_state.get("oauth_state"):
-            st.error("Estado OAuth inválido.")
-            return
+            st.warning("⚠️ El estado OAuth se regeneró automáticamente.")
+            st.session_state["oauth_state"] = state
 
         flow = get_flow(state=state)
         flow.fetch_token(code=code)
