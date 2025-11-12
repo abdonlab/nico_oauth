@@ -16,18 +16,19 @@ st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖"
 from dotenv import load_dotenv
 load_dotenv()
 
+# 🔧 🔸 Este bloque se movió más abajo para evitar el error:
 # --- Redirección manual para el flujo OAuth en Streamlit Cloud ---
-query_params = st.experimental_get_query_params()
-if "code" in query_params and "state" in query_params:
-    st.write("🔄 Procesando autenticación con Google...")
-    try:
-        # Llama directamente a tu función para intercambiar el código
-        from streamlit.runtime.scriptrunner import add_script_run_ctx
-        exchange_code_for_token()
-        st.rerun()
-    except Exception as e:
-        st.error(f"Error al procesar autenticación: {e}")
-
+# query_params = st.experimental_get_query_params()
+# if "code" in query_params and "state" in query_params:
+#     st.write("🔄 Procesando autenticación con Google...")
+#     try:
+#         # Llama directamente a tu función para intercambiar el código
+#         from streamlit.runtime.scriptrunner import add_script_run_ctx
+#         exchange_code_for_token()
+#         st.rerun()
+#     except Exception as e:
+#         st.error(f"Error al procesar autenticación: {e}")
+# 🔧 (Se ejecutará más abajo, después de definir la función exchange_code_for_token)
 
 # 🔐 Cargar variables desde st.secrets (manteniendo compatibilidad con os.getenv por si lo tienes en local)
 CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID"))
@@ -143,6 +144,16 @@ def exchange_code_for_token():
             st.experimental_set_query_params()
         except Exception as e:
             st.error(f"Error al autenticar: {e}")
+
+# 🔧 🔹 Ahora sí: este bloque se ejecuta después de que la función está definida
+query_params = st.experimental_get_query_params()
+if "code" in query_params and "state" in query_params:
+    st.write("🔄 Procesando autenticación con Google...")
+    try:
+        exchange_code_for_token()
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error al procesar autenticación: {e}")
 
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-lite-001')}:generateContent?key={GEMINI_API_KEY}"
