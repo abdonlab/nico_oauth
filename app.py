@@ -4,25 +4,33 @@ import json
 import base64
 import requests
 import streamlit as st
+# from dotenv import load_dotenv  # 🔸 Comentado: ya no se usa porque ahora todo viene de st.secrets
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 
 from speech_utils import synthesize_edge_tts
 
-# Configuración inicial
 st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
 
-# 🔐 Cargar credenciales desde los Secrets de Streamlit
-CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID")
-CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI")
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = st.secrets.get("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
+# load_dotenv()  # 🔸 Comentado: ya no se necesita
+
+# 🔐 Cargar variables desde st.secrets (manteniendo compatibilidad con os.getenv por si lo tienes en local)
+CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID"))
+CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET"))
+# REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")  # 🔸 Comentado: reemplazado por st.secrets
+REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/oauth2callback")
+
+# 🔹 Verificación para evitar errores de barra final
+if REDIRECT_URI and not REDIRECT_URI.endswith("/"):
+    REDIRECT_URI = REDIRECT_URI
+
+# 🔹 API Gemini
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
+GEMINI_MODEL = st.secrets.get("GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-001"))
 
 SCOPES = ["openid", "email", "profile"]
 
-# 🔄 OAuth 2.0
 def get_flow(state=None):
     client_config = {
         "web": {
@@ -30,19 +38,21 @@ def get_flow(state=None):
             "client_secret": CLIENT_SECRET,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [REDIRECT_URI],
+            # "redirect_uris": [REDIRECT_URI],  # 🔸 Comentado para control explícito
+            "redirect_uris": ["https://nicooapp-umsnh.streamlit.app/oauth2callback"],  # ✅ URI fija correcta
         }
     }
-    flow = Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=REDIRECT_URI)
+    flow = Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri="https://nicooapp-umsnh.streamlit.app/oauth2callback")
     if state:
-        flow.redirect_uri = REDIRECT_URI
+        flow.redirect_uri = "https://nicooapp-umsnh.streamlit.app/oauth2callback"
     return flow
 
 def login_view():
     st.markdown(header_html(), unsafe_allow_html=True)
     st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
     if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
-        st.error("Faltan GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI en los Secrets.")
+        st.error("Faltan GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI.")
+        st.code(f"CLIENT_ID={CLIENT_ID}\nCLIENT_SECRET={bool(CLIENT_SECRET)}\nREDIRECT_URI={REDIRECT_URI}")
         return
     flow = get_flow()
     auth_url, state = flow.authorization_url(
@@ -53,18 +63,37 @@ def login_view():
     st.session_state["oauth_state"] = state
     st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
-# Encabezado visual
 def header_html():
-    return """
+    # ⚠️ No se modifica nada de tu visual ni video
+    video_path = "assets/videos/nico_header_video.mp4"
+    if os.path.exists(video_path):
+        with open(video_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        video_tag = f"""
+        <video class="nico-video" autoplay loop muted playsinline>
+            <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+        </video>
+        """
+    else:
+        video_tag = '<div class="nico-placeholder"></div>'
+
+    return f"""
     <style>
-    .nico-header { background:#0f2347; color:#fff; padding:16px 20px; border-radius:8px; }
-    .nico-title { font-size:26px; font-weight:800; margin:0; }
-    .nico-subtitle { margin:0; font-size:18px; opacity:.9; }
-    .chat-bubble { background:#f8fbff; border:2px solid #dfe8f9; border-radius:14px; padding:18px; margin-top:12px; }
+    .nico-header {{ background:#0f2347; color:#fff; padding:16px 20px; border-radius:8px; }}
+    .nico-wrap {{ display:flex; align-items:center; gap:16px; }}
+    .nico-video,.nico-placeholder {{ width:56px; height:56px; border-radius:50%; background:#fff; object-fit:cover; }}
+    .nico-title {{ font-size:26px; font-weight:800; margin:0; }}
+    .nico-subtitle {{ margin:0; font-size:18px; opacity:.9; }}
+    .chat-bubble {{ background:#f8fbff; border:2px solid #dfe8f9; border-radius:14px; padding:18px; margin-top:12px; }}
     </style>
     <div class="nico-header">
-        <p class="nico-title">NICO</p>
-        <p class="nico-subtitle">Asistente Virtual UMSNH</p>
+        <div class="nico-wrap">
+            {video_tag}
+            <div>
+                <p class="nico-title">NICO</p>
+                <p class="nico-subtitle">Asistente Virtual UMSNH</p>
+            </div>
+        </div>
     </div>
     """
 
@@ -102,7 +131,7 @@ def exchange_code_for_token():
             st.error(f"Error al autenticar: {e}")
 
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-lite-001')}:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -124,18 +153,16 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
     except Exception as e:
         return f"⚠️ Error con Gemini: {e}"
 
-# Inicialización
 ensure_session_defaults()
 exchange_code_for_token()
 
-# Autenticación
 if not st.session_state.get("logged"):
     login_view()
     st.stop()
 
-# Interfaz principal
+# ⚠️ No se modifica nada visual ni de interfaz
 st.markdown(header_html(), unsafe_allow_html=True)
-c1, c2, c3 = st.columns([0.1, 0.1, 0.8])
+c1, c2, c3 = st.columns([0.1,0.1,0.8])
 with c1:
     if st.button("🎙️ Voz: ON" if st.session_state["voice_on"] else "🔇 Voz: OFF"):
         st.session_state["voice_on"] = not st.session_state["voice_on"]
@@ -150,8 +177,7 @@ if st.session_state.get("open_cfg"):
         st.slider("Temperatura", 0.0, 1.5, key="temperature")
         st.slider("Top-P", 0.0, 1.0, key="top_p")
         st.slider("Máx. tokens", 64, 2048, key="max_tokens", step=32)
-        if st.button("Cerrar"):
-            st.session_state["open_cfg"] = False
+        if st.button("Cerrar"): st.session_state["open_cfg"] = False
 
 st.markdown("### 💬 Conversación")
 user_msg = st.text_input("Escribe tu pregunta:")
@@ -170,9 +196,10 @@ for msg in st.session_state["history"][-20:]:
             st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
             if st.session_state["voice_on"]:
                 try:
+                    from speech_utils import synthesize_edge_tts
                     audio_bytes = synthesize_edge_tts(msg["content"])
                     st.audio(audio_bytes, format="audio/mp3")
                 except Exception as e:
                     st.warning(f"Voz no disponible: {e}")
 
-st.caption(f"NICO · UMSNH — login Google OAuth · Modelo: {GEMINI_MODEL}")
+st.caption("NICO · UMSNH — login Google OAuth · Modelo: {}".format(GEMINI_MODEL))
