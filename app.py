@@ -30,9 +30,8 @@ import requests
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
-from speech_utils import synthesize_edge_ttsst.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
-
-# 🔹 Cargar variables locales y de Streamlit Secrets
+from speech_utils import synthesize_edge_tts
+st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")# 🔹 Cargar variables locales y de Streamlit Secrets
 from dotenv import load_dotenv
 load_dotenv()
 
