@@ -1,5 +1,3 @@
-Agrega eso pero sin modificar nada mas además si ocupas borrar algo solo coméntalo no lo borres:
-
 # ============================================================
 # NICO OAuth + Gemini (VERSIÓN FINAL FIJA para Streamlit Cloud)
 # ============================================================
@@ -254,4 +252,8 @@ for msg in st.session_state["history"][-20:]:
             if st.session_state["voice_on"]:
                 try:
                     audio_bytes = synthesize_edge_tts(msg["content"])
-                    st.audio(audi
+                    st.audio(audio_bytes, format="audio/mp3")
+                except Exception as e:
+                    st.warning(f"Voz no disponible: {e}")
+
+st.caption(f"NICO · UMSNH — login Google OAuth · Modelo: {GEMINI_MODEL}")
