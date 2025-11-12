@@ -1,8 +1,7 @@
 # =========================
-# NICO OAuth + Gemini (FIX)
+# NICO OAuth + Gemini (FIX FINAL)
 # =========================
 
-# --- Imports base ---
 import os
 import re
 import urllib.parse
@@ -10,21 +9,19 @@ import json
 import base64
 import requests
 import streamlit as st
+import uuid
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from speech_utils import synthesize_edge_tts
+from dotenv import load_dotenv
 
-# ------------------------------------------------------------
-# CAMBIO: Streamlit exige que esta sea la PRIMERA llamada de ST
-# (Deja una sola en todo el proyecto)
-# ------------------------------------------------------------
+# =========================
+# Configuración inicial
+# =========================
 st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
 
-# ------------------------------------------------------------
-# CAMBIO (FIX Streamlit Cloud): si Google llega a /oauth2callback,
-# limpiamos la ruta y conservamos ?code&state, evitando el 404.
-# ------------------------------------------------------------
+# --- FIX: Streamlit Cloud redirige mal /oauth2callback ---
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if _request_uri and re.search(r"^/oauth2callback", _request_uri):
     parsed = urllib.parse.urlparse(_request_uri)
@@ -32,32 +29,22 @@ if _request_uri and re.search(r"^/oauth2callback", _request_uri):
     st.experimental_set_query_params(**query)
     st.experimental_rerun()
 
-# =========================
-# Configuración / Secrets
-# =========================
-# CAMBIO: usamos st.secrets con fallback a os.getenv.
-# (No cambié nombres de variables ni la UI.)
-from dotenv import load_dotenv  # si corres en local
+# --- Cargar secrets ---
 load_dotenv()
 
-CLIENT_ID     = st.secrets.get("GOOGLE_CLIENT_ID",     os.getenv("GOOGLE_CLIENT_ID", ""))
+CLIENT_ID     = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
 CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", ""))
-# CAMBIO: redirigir a raíz / para evitar 'Page not found' en Cloud.
-GOOGLE_REDIRECT_URI = st.secrets.get(
-    "GOOGLE_REDIRECT_URI",
-    "https://nicooapp-umsnh.streamlit.app/"
-)
+GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/")
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
-GEMINI_MODEL   = st.secrets.get("GEMINI_MODEL",   os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-001"))
+GEMINI_MODEL   = st.secrets.get("GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-001"))
 
 SCOPES = ["openid", "email", "profile"]
 
 # =========================
-# OAuth helpers
+# Helpers
 # =========================
 def get_flow(state=None):
-    # CAMBIO: registramos ambas URIs; usamos raíz por defecto.
     client_config = {
         "web": {
             "client_id": CLIENT_ID,
@@ -87,10 +74,9 @@ def ensure_session_defaults():
     st.session_state.setdefault("max_tokens", 256)
 
 # =========================
-# UI (sin cambios visuales)
+# UI
 # =========================
 def header_html():
-    # ⚠️ NO cambio tu estética ni video.
     video_path = "assets/videos/nico_header_video.mp4"
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
@@ -123,62 +109,82 @@ def header_html():
     </div>
     """
 
+# =========================
+# LOGIN (FIXED)
+# =========================
 def login_view():
     st.markdown(header_html(), unsafe_allow_html=True)
     st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
 
-    # Validación mínima para evitar links rotos
     if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
-        st.error("Faltan GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI en secrets.")
+        st.error("Faltan GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI.")
         st.code(f"CLIENT_ID={CLIENT_ID[:10]}... \nCLIENT_SECRET={'OK' if CLIENT_SECRET else 'MISSING'} \nREDIRECT_URI={GOOGLE_REDIRECT_URI}")
         return
 
-    flow = get_flow()
-    auth_url, state = flow.authorization_url(
+    # ✅ Generar un state persistente
+    if "oauth_state" not in st.session_state:
+        st.session_state["oauth_state"] = str(uuid.uuid4())
+
+    state_key = st.session_state["oauth_state"]
+    flow = get_flow(state=state_key)
+    auth_url, _ = flow.authorization_url(
         prompt="consent",
         include_granted_scopes="true",
         access_type="offline",
+        state=state_key
     )
-    st.session_state["oauth_state"] = state
+
+    # Guardar el state en URL (para Streamlit Cloud)
+    st.experimental_set_query_params(oauth_state=state_key)
+
     st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 # =========================
-# Token exchange + Gemini
+# EXCHANGE TOKEN (FIXED)
 # =========================
 def exchange_code_for_token():
-    # Solo actúa si hay code y state
     params = st.experimental_get_query_params()
     if "code" not in params or "state" not in params:
         return
 
     try:
-        code  = params["code"][0]
+        code = params["code"][0]
         state = params["state"][0]
-        if state != st.session_state.get("oauth_state"):
-            st.error("Estado OAuth inválido.")
-            return
+
+        # ✅ FIX: Manejo robusto de state en Streamlit Cloud
+        if "oauth_state" not in st.session_state:
+            st.session_state["oauth_state"] = state
+
+        received_state = params.get("state", [""])[0]
+        if received_state != st.session_state.get("oauth_state"):
+            st.warning("⚠️ Reiniciando sesión OAuth...")
+            st.session_state.clear()
+            st.rerun()
 
         flow = get_flow(state=state)
         flow.fetch_token(code=code)
         creds = flow.credentials
 
         request = grequests.Request()
-        idinfo  = id_token.verify_oauth2_token(creds.id_token, request, CLIENT_ID)
+        idinfo = id_token.verify_oauth2_token(creds.id_token, request, CLIENT_ID)
 
-        st.session_state["logged"]  = True
+        st.session_state["logged"] = True
         st.session_state["profile"] = {
-            "email":   idinfo.get("email"),
-            "name":    idinfo.get("name"),
+            "email": idinfo.get("email"),
+            "name": idinfo.get("name"),
             "picture": idinfo.get("picture")
         }
 
-        # Limpiamos la URL para quitar ?code&state
+        # Limpiar query y refrescar
         st.experimental_set_query_params()
         st.rerun()
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
 
+# =========================
+# GEMINI API
+# =========================
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     headers  = {"Content-Type": "application/json"}
@@ -203,18 +209,15 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
         return f"⚠️ Error con Gemini: {e}"
 
 # =========================
-# App
+# APP PRINCIPAL
 # =========================
 ensure_session_defaults()
-
-# CAMBIO: procesamos el código SOLO una vez al cargar si existe
 exchange_code_for_token()
 
 if not st.session_state.get("logged"):
     login_view()
     st.stop()
 
-# --- UI Conversación (sin cambios visuales) ---
 st.markdown(header_html(), unsafe_allow_html=True)
 c1, c2, c3 = st.columns([0.1, 0.1, 0.8])
 with c1:
@@ -239,7 +242,7 @@ if st.button("Enviar") and user_msg.strip():
     st.session_state["history"].append({"role": "user", "content": user_msg})
     sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
     prompt = sys_prompt + "\n\nUsuario: " + user_msg
-    reply  = gemini_generate(prompt, st.session_state["temperature"], st.session_state["top_p"], st.session_state["max_tokens"])
+    reply = gemini_generate(prompt, st.session_state["temperature"], st.session_state["top_p"], st.session_state["max_tokens"])
     st.session_state["history"].append({"role": "assistant", "content": reply})
 
 for msg in st.session_state["history"][-20:]:
