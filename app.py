@@ -1,6 +1,6 @@
-# =========================
-# NICO OAuth + Gemini (FIX FINAL)
-# =========================
+# ============================================================
+# NICO OAuth + Gemini (VERSIÓN FINAL FIJA para Streamlit Cloud)
+# ============================================================
 
 import os
 import re
@@ -9,41 +9,54 @@ import json
 import base64
 import requests
 import streamlit as st
-import uuid
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from speech_utils import synthesize_edge_tts
 from dotenv import load_dotenv
 
-# =========================
-# Configuración inicial
-# =========================
+# ------------------------------------------------------------
+# 🔧 Streamlit exige que set_page_config esté al inicio
+# ------------------------------------------------------------
 st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
 
-# --- FIX: Streamlit Cloud redirige mal /oauth2callback ---
+# ============================================================
+# 🔧 FIX 1: Manejar redirección desde /oauth2callback
+# ============================================================
+# Cuando Google intenta regresar a /oauth2callback, Streamlit no tiene esa ruta.
+# Este bloque redirige automáticamente a la raíz "/" conservando los parámetros.
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
-if _request_uri and re.search(r"^/oauth2callback", _request_uri):
+if "/oauth2callback" in _request_uri:
     parsed = urllib.parse.urlparse(_request_uri)
     query = urllib.parse.parse_qs(parsed.query)
     st.experimental_set_query_params(**query)
     st.experimental_rerun()
 
-# --- Cargar secrets ---
+# ============================================================
+# 🔧 FIX 2: Variables y configuración
+# ============================================================
 load_dotenv()
 
 CLIENT_ID     = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
 CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", ""))
-GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/")
+
+# 🔧 Antes usaba "/oauth2callback", pero Streamlit Cloud no lo soporta.
+# GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/oauth2callback")
+GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/")  # ✅ FIX
+
+# 🔧 Scopes actualizados según Google 2024
+SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile"
+]
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 GEMINI_MODEL   = st.secrets.get("GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-001"))
 
-SCOPES = ["openid", "email", "profile"]
-
-# =========================
-# Helpers
-# =========================
+# ============================================================
+# 🔧 Helper: Crear flujo OAuth correctamente
+# ============================================================
 def get_flow(state=None):
     client_config = {
         "web": {
@@ -51,9 +64,9 @@ def get_flow(state=None):
             "client_secret": CLIENT_SECRET,
             "auth_uri":  "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
+            # 🔧 Registramos URIs principales compatibles
             "redirect_uris": [
                 "https://nicooapp-umsnh.streamlit.app/",
-                "https://nicooapp-umsnh.streamlit.app/oauth2callback",
                 "http://localhost:8501/",
                 "http://127.0.0.1:8501/"
             ],
@@ -64,6 +77,9 @@ def get_flow(state=None):
         flow.redirect_uri = GOOGLE_REDIRECT_URI
     return flow
 
+# ============================================================
+# Funciones auxiliares
+# ============================================================
 def ensure_session_defaults():
     st.session_state.setdefault("logged", False)
     st.session_state.setdefault("profile", {})
@@ -73,9 +89,9 @@ def ensure_session_defaults():
     st.session_state.setdefault("top_p", 0.9)
     st.session_state.setdefault("max_tokens", 256)
 
-# =========================
-# UI
-# =========================
+# ============================================================
+# UI original — sin modificar nada visual
+# ============================================================
 def header_html():
     video_path = "assets/videos/nico_header_video.mp4"
     if os.path.exists(video_path):
@@ -109,82 +125,63 @@ def header_html():
     </div>
     """
 
-# =========================
-# LOGIN (FIXED)
-# =========================
+# ============================================================
+# Vista de login
+# ============================================================
 def login_view():
     st.markdown(header_html(), unsafe_allow_html=True)
     st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
 
     if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
-        st.error("Faltan GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI.")
-        st.code(f"CLIENT_ID={CLIENT_ID[:10]}... \nCLIENT_SECRET={'OK' if CLIENT_SECRET else 'MISSING'} \nREDIRECT_URI={GOOGLE_REDIRECT_URI}")
+        st.error("Faltan GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI.")
         return
 
-    # ✅ Generar un state persistente
-    if "oauth_state" not in st.session_state:
-        st.session_state["oauth_state"] = str(uuid.uuid4())
-
-    state_key = st.session_state["oauth_state"]
-    flow = get_flow(state=state_key)
-    auth_url, _ = flow.authorization_url(
-        prompt="consent",
-        include_granted_scopes="true",
+    flow = get_flow()
+    auth_url, state = flow.authorization_url(
         access_type="offline",
-        state=state_key
+        include_granted_scopes=False,
+        prompt="consent"
     )
-
-    # Guardar el state en URL (para Streamlit Cloud)
-    st.experimental_set_query_params(oauth_state=state_key)
-
+    st.session_state["oauth_state"] = state
     st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
-# =========================
-# EXCHANGE TOKEN (FIXED)
-# =========================
+# ============================================================
+# Intercambio del código OAuth por token
+# ============================================================
 def exchange_code_for_token():
     params = st.experimental_get_query_params()
     if "code" not in params or "state" not in params:
         return
-
     try:
-        code = params["code"][0]
+        code  = params["code"][0]
         state = params["state"][0]
-
-        # ✅ FIX: Manejo robusto de state en Streamlit Cloud
-        if "oauth_state" not in st.session_state:
-            st.session_state["oauth_state"] = state
-
-        received_state = params.get("state", [""])[0]
-        if received_state != st.session_state.get("oauth_state"):
-            st.warning("⚠️ Reiniciando sesión OAuth...")
-            st.session_state.clear()
-            st.rerun()
+        if state != st.session_state.get("oauth_state"):
+            st.error("Estado OAuth inválido.")
+            return
 
         flow = get_flow(state=state)
         flow.fetch_token(code=code)
         creds = flow.credentials
 
         request = grequests.Request()
-        idinfo = id_token.verify_oauth2_token(creds.id_token, request, CLIENT_ID)
+        idinfo  = id_token.verify_oauth2_token(creds.id_token, request, CLIENT_ID)
 
-        st.session_state["logged"] = True
+        st.session_state["logged"]  = True
         st.session_state["profile"] = {
-            "email": idinfo.get("email"),
-            "name": idinfo.get("name"),
+            "email":   idinfo.get("email"),
+            "name":    idinfo.get("name"),
             "picture": idinfo.get("picture")
         }
 
-        # Limpiar query y refrescar
         st.experimental_set_query_params()
         st.rerun()
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
 
-# =========================
-# GEMINI API
-# =========================
+# ============================================================
+# Generador de texto con Gemini
+# ============================================================
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     headers  = {"Content-Type": "application/json"}
@@ -208,9 +205,9 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
     except Exception as e:
         return f"⚠️ Error con Gemini: {e}"
 
-# =========================
-# APP PRINCIPAL
-# =========================
+# ============================================================
+# Lógica principal
+# ============================================================
 ensure_session_defaults()
 exchange_code_for_token()
 
@@ -218,6 +215,7 @@ if not st.session_state.get("logged"):
     login_view()
     st.stop()
 
+# --- UI Conversación (visual intacto) ---
 st.markdown(header_html(), unsafe_allow_html=True)
 c1, c2, c3 = st.columns([0.1, 0.1, 0.8])
 with c1:
@@ -242,7 +240,7 @@ if st.button("Enviar") and user_msg.strip():
     st.session_state["history"].append({"role": "user", "content": user_msg})
     sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
     prompt = sys_prompt + "\n\nUsuario: " + user_msg
-    reply = gemini_generate(prompt, st.session_state["temperature"], st.session_state["top_p"], st.session_state["max_tokens"])
+    reply  = gemini_generate(prompt, st.session_state["temperature"], st.session_state["top_p"], st.session_state["max_tokens"])
     st.session_state["history"].append({"role": "assistant", "content": reply})
 
 for msg in st.session_state["history"][-20:]:
