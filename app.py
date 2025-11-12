@@ -8,12 +8,26 @@ import streamlit as st
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
-
 from speech_utils import synthesize_edge_tts
 
 st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
 
-# load_dotenv()  # 🔸 Comentado: ya no se necesita
+# 🔹 Cargar variables locales y de Streamlit Secrets
+from dotenv import load_dotenv
+load_dotenv()
+
+# --- Redirección manual para el flujo OAuth en Streamlit Cloud ---
+query_params = st.experimental_get_query_params()
+if "code" in query_params and "state" in query_params:
+    st.write("🔄 Procesando autenticación con Google...")
+    try:
+        # Llama directamente a tu función para intercambiar el código
+        from streamlit.runtime.scriptrunner import add_script_run_ctx
+        exchange_code_for_token()
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error al procesar autenticación: {e}")
+
 
 # 🔐 Cargar variables desde st.secrets (manteniendo compatibilidad con os.getenv por si lo tienes en local)
 CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID"))
