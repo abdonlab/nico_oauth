@@ -1,12 +1,10 @@
-# ============================================================
-# 🔧 FIX para manejar redirección OAuth en Streamlit Cloud
-# Streamlit no soporta rutas personalizadas como /oauth2callback,
-# por lo tanto redirigimos manualmente a la raíz manteniendo el "code" y "state".
-# ============================================================
 import os
 import re
 import urllib.parse
 import streamlit as st
+
+# --- ESTA VA AQUÍ ---
+st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
 
 # --- FIX para /oauth2callback ---
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
@@ -15,8 +13,8 @@ if _request_uri and re.search(r"^/oauth2callback", _request_uri):
     query = urllib.parse.parse_qs(parsed.query)
     st.experimental_set_query_params(**query)
     st.experimental_rerun()
-
-# --- Aquí empieza tu app normal ---
+# --- Aquí sigue tu app ---
+from speech_utils import synthesize_edge_tts# --- Aquí empieza tu app normal ---
 from speech_utils import synthesize_edge_tts
 
 st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
