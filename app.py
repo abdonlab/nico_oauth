@@ -1,28 +1,36 @@
+# ============================================================
+# 🔧 FIX para manejar redirección OAuth en Streamlit Cloud
+# Streamlit no soporta rutas personalizadas como /oauth2callback,
+# por lo tanto redirigimos manualmente a la raíz manteniendo el "code" y "state".
+# ============================================================
+
 import os
+import re
+import urllib.parse
+import streamlit.web.bootstrap
+import streamlit as st
+
+_request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
+if _request_uri and re.search(r"^/oauth2callback", _request_uri):
+    parsed = urllib.parse.urlparse(_request_uri)
+    query = urllib.parse.parse_qs(parsed.query)
+    from streamlit.runtime.scriptrunner import add_script_run_ctx
+    st.experimental_set_query_params(**query)
+    st.experimental_rerun()
+
+# ============================================================
+# 🔽 Aquí comienza tu código original, intacto visualmente 🔽
+# ============================================================
+
 import time
 import json
 import base64
 import requests
-import streamlit as st
-# 🔧 --- Fix para manejar correctamente /oauth2callback en Streamlit Cloud ---
-import urllib.parse
-
-# Obtener la URL actual
-query = st.experimental_get_query_params()
-page_url = st.experimental_get_query_params().__str__()
-
-# Si el usuario fue redirigido a /oauth2callback, limpiamos la ruta
-if "oauth2callback" in page_url:
-    # 🔹 Redirigir a la raíz manteniendo los parámetros (si existen)
-    from streamlit.runtime.scriptrunner import add_script_run_ctx
-    st.experimental_set_query_params(**query)  # mantiene code y state
-    st.experimental_rerun()# from dotenv import load_dotenv  # 🔸 Comentado: ya no se usa porque ahora todo viene de st.secrets
+# from dotenv import load_dotenv  # 🔸 Comentado: ya no se usa porque ahora todo viene de st.secrets
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
-from speech_utils import synthesize_edge_tts
-
-st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
+from speech_utils import synthesize_edge_ttsst.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
 
 # 🔹 Cargar variables locales y de Streamlit Secrets
 from dotenv import load_dotenv
