@@ -4,7 +4,19 @@ import json
 import base64
 import requests
 import streamlit as st
-# from dotenv import load_dotenv  # 🔸 Comentado: ya no se usa porque ahora todo viene de st.secrets
+# 🔧 --- Fix para manejar correctamente /oauth2callback en Streamlit Cloud ---
+import urllib.parse
+
+# Obtener la URL actual
+query = st.experimental_get_query_params()
+page_url = st.experimental_get_query_params().__str__()
+
+# Si el usuario fue redirigido a /oauth2callback, limpiamos la ruta
+if "oauth2callback" in page_url:
+    # 🔹 Redirigir a la raíz manteniendo los parámetros (si existen)
+    from streamlit.runtime.scriptrunner import add_script_run_ctx
+    st.experimental_set_query_params(**query)  # mantiene code y state
+    st.experimental_rerun()# from dotenv import load_dotenv  # 🔸 Comentado: ya no se usa porque ahora todo viene de st.secrets
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
