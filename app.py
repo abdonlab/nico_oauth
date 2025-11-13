@@ -267,49 +267,75 @@ if st.session_state.get("cfg_open"):
 # ============================================================
 # 📌 Conversación + VIDEO 🆕
 # ============================================================
+# ============================
+# Conversación
+# ============================
 
-col_chat, col_video = st.columns([0.7, 0.3])
+st.markdown("### 💬 Conversación")
+user_msg = st.text_input("Escribe tu pregunta:")
 
-with col_chat:
-    st.markdown("### 💬 Conversación")
-    user_msg = st.text_input("Escribe tu pregunta:")
+# --- Creamos layout: izq = chat, der = video ---
+chat_col, video_col = st.columns([0.70, 0.30])
 
-    if st.button("Enviar") and user_msg.strip():
+# Crear contenedor donde se insertará el video dinámico
+with video_col:
+    video_container = st.empty()
 
-        # ---------- VIDEO: Seleccionar y mostrar ----------
-        data_uri, mime = pick_video_data_uri()
-        if data_uri:
-            video_html = f"""
-            <video autoplay loop muted playsinline width="220" height="130"
-                   class="nico-chat-video"
-                   style="border-radius:14px;box-shadow:0 0 12px rgba(0,0,0,0.25);">
-                <source src="{data_uri}" type="{mime}">
-            </video>
-            """
-            st.session_state["video_html"] = video_html
+if st.button("Enviar") and user_msg.strip():
 
-        # ---------- Guardar pregunta ----------
-        st.session_state["history"].append({"role":"user", "content":user_msg})
+    # Guardar mensaje del usuario
+    st.session_state["history"].append({"role": "user", "content": user_msg})
 
-        # ---------- Generar respuesta ----------
-        prompt = f"Eres NICO, asistente institucional de la UMSNH.\nUsuario: {user_msg}"
-        reply = gemini_generate(prompt,
-                                st.session_state["temperature"],
-                                st.session_state["top_p"],
-                                st.session_state["max_tokens"])
+    # --- 🎬 Mostrar video mientras responde ---
+    import random, base64, os
 
-        st.session_state["history"].append({"role":"assistant", "content":reply})
+    video_path = f"assets/videos/{random.choice(os.listdir('assets/videos'))}"
+    
+    with open(video_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("utf-8")
 
-        # ---------- Pausar video al terminar ----------
-        stop_js = """
-        <script>
-        const vids = window.parent.document.querySelectorAll('.nico-chat-video');
-        vids.forEach(v => { v.pause(); v.currentTime = 0; });
-        </script>
-        """
-        st.components.v1.html(stop_js, height=0)
-        st.rerun()
-# --------- VIDEO A LA DERECHA ---------
-with col_video:
-    st.markdown("### 🎬 NICO en acción")
-    st.markdown(st.session_state["video_html"], unsafe_allow_html=True)
+    video_container.markdown(
+        f"""
+        <video width="200" autoplay loop muted playsinline style="border-radius:10px;">
+            <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+        </video>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # --- 🔮 Generar respuesta ---
+    sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
+    prompt = sys_prompt + "\n\nUsuario: " + user_msg
+    reply  = gemini_generate(prompt, st.session_state["temperature"],
+                                      st.session_state["top_p"],
+                                      st.session_state["max_tokens"])
+
+    # Guardar respuesta
+    st.session_state["history"].append({"role": "assistant", "content": reply})
+
+    # --- 🛑 Detener video cuando termine ---
+    stop_js = """
+    <script>
+        const vids = parent.document.getElementsByTagName('video');
+        for (let v of vids) { v.pause(); v.currentTime = 0; }
+    </script>
+    """
+    video_container.components.v1.html(stop_js, height=0)
+
+    st.rerun()
+
+# ============================
+# Mostrar historial
+# ============================
+for msg in st.session_state["history"][-20:]:
+    if msg["role"] == "user":
+        st.chat_message("user").markdown(msg["content"])
+    else:
+        with st.chat_message("assistant"):
+            st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
+            if st.session_state["voice_on"]:
+                try:
+                    audio_bytes = synthesize_edge_tts(msg["content"])
+                    st.audio(audio_bytes, format="audio/mp3")
+                except:
+                    pass
