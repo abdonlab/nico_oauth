@@ -247,12 +247,7 @@ conv_col, video_col = st.columns([0.7, 0.3])
 # Contenedor para el video a la derecha
 with video_col:
     video_container = st.empty()  # aquí se incrusta el video pequeño
-    # 🔄 Si ya hay un video cargado en sesión, mostrarlo
-if "current_video_html" in st.session_state:
-    video_container.markdown(
-        st.session_state["current_video_html"],
-        unsafe_allow_html=True
-    )
+
 # ============================
 # UI de conversación (lado izq.)
 # ============================
@@ -286,80 +281,72 @@ with conv_col:
         # Guardar mensaje del usuario en historial
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
-        # --- 🎬 Seleccionar y mostrar video mientras responde ---
-try:
-    video_files = []
-    if os.path.isdir("assets/videos"):
-        for fname in os.listdir("assets/videos"):
-            if fname.lower().endswith((".mp4", ".webm", ".ogg", ".ogv")):
-                video_files.append(fname)
+        # --- 🎬 Mostrar video mientras responde ---
+        try:
+            video_files = []
+            if os.path.isdir("assets/videos"):
+                for fname in os.listdir("assets/videos"):
+                    if fname.lower().endswith((".mp4", ".webm", ".ogg", ".ogv")):
+                        video_files.append(fname)
 
-    if video_files:
-        chosen = random.choice(video_files)
-        video_path = os.path.join("assets/videos", chosen)
+            if video_files:
+                chosen = random.choice(video_files)
+                video_path = os.path.join("assets/videos", chosen)
+                with open(video_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode("utf-8")
 
-        with open(video_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("utf-8")
+                video_container.markdown(
+                    f"""
+                    <video width="220" autoplay loop muted playsinline style="border-radius:12px;">
+                        <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+                    </video>
+                    """,
+                    unsafe_allow_html=True
+                )
+        except Exception as e:
+            st.warning(f"No se pudo reproducir el video: {e}")
 
-        html_video = f"""
-        <video width="220" autoplay loop muted playsinline id="nicoVideo" style="border-radius:12px;">
-            <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-        </video>
+        # --- 🔮 Generar respuesta ---
+        sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
+        prompt = sys_prompt + "\n\nUsuario: " + user_msg
+        reply = gemini_generate(
+            prompt,
+            st.session_state["temperature"],
+            st.session_state["top_p"],
+            st.session_state["max_tokens"]
+        )
+
+        # Guardar respuesta en historial
+        st.session_state["history"].append({"role": "assistant", "content": reply})
+
+        # --- 🛑 Detener el video ---
+        stop_js = """
+        <script>
+            const vids = parent.document.getElementsByTagName('video');
+            for (let v of vids) { v.pause(); v.currentTime = 0; }
+        </script>
         """
+        st.components.v1.html(stop_js, height=0)
 
-        # 👉 Guardamos el HTML del video para que NO desaparezca después del rerun
-        st.session_state["current_video_html"] = html_video
-        video_container.markdown(html_video, unsafe_allow_html=True)
+        # Forzar rerun para que se muestre la respuesta arriba
+        st.rerun()
 
-except Exception as e:
-    st.warning(f"No se pudo reproducir el video: {e}")
+    # Mostrar historial: último mensaje ARRIBA
+    for msg in reversed(st.session_state["history"][-20:]):
+        if msg["role"] == "user":
+            st.chat_message("user").markdown(msg["content"])
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
+                if st.session_state["voice_on"]:
+                    try:
+                        audio_bytes = synthesize_edge_tts(msg["content"])
+                        st.audio(audio_bytes, format="audio/mp3")
+                    except Exception as e:
+                        st.warning(f"Voz no disponible: {e}")
 
-# --- 🔮 Generar respuesta ---
-sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
-prompt = sys_prompt + "\n\nUsuario: " + user_msg
-
-reply = gemini_generate(
-    prompt,
-    st.session_state["temperature"],
-    st.session_state["top_p"],
-    st.session_state["max_tokens"]
-)
-
-# Guardar respuesta en historial
-st.session_state["history"].append({
-    "role": "assistant",
-    "content": reply
-})
-
-# --- 🛑 Detener el video ---
-stop_js = """
-<script>
-    const vids = parent.document.getElementsByTagName('video');
-    for (let v of vids) { v.pause(); v.currentTime = 0; }
-</script>
-"""
-st.components.v1.html(stop_js, height=0)
-
-# Forzar rerun para que se muestre la respuesta arriba
-st.rerun()
-
-# Mostrar historial: último mensaje ARRIBA
-for msg in reversed(st.session_state["history"][-20:]):
-    if msg["role"] == "user":
-        st.chat_message("user").markdown(msg["content"])
-    else:
-        with st.chat_message("assistant"):
-            st.markdown(
-                f"<div class='chat-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
-
-            if st.session_state["voice_on"]:
-                try:
-                    audio_bytes = synthesize_edge_tts(msg["content"])
-                    st.audio(audio_bytes, format="audio/mp3")
-                except Exception as e:
-                    st.warning(f"Voz no disponible: {e}")# Versión anterior del bloque de conversación (SOLO REFERENCIA)
+# ------------------------------------------------------------
+# Versión anterior del bloque de conversación (SOLO REFERENCIA)
 # (comentada para no borrarla, como me pediste)
 # ------------------------------------------------------------
 # st.markdown("### 💬 Conversación")
