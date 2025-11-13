@@ -318,18 +318,40 @@ with conv_col:
 
         # Guardar respuesta en historial
         st.session_state["history"].append({"role": "assistant", "content": reply})
+# --- 🛑 Detener el video v2---
+stop_js = """
+<script>
+    const vids = parent.document.getElementsByTagName('video');
+    for (let v of vids) { 
+        v.pause(); 
+        v.currentTime = 0; 
+    }
+</script>
+"""
+st.components.v1.html(stop_js, height=0)
 
-        # --- 🛑 Detener el video ---
-        stop_js = """
-        <script>
-            const vids = parent.document.getElementsByTagName('video');
-            for (let v of vids) { v.pause(); v.currentTime = 0; }
-        </script>
-        """
-        st.components.v1.html(stop_js, height=0)
+# --- 🧊 Mantener el último frame estático ---
+video_container.markdown(
+    f"""
+    <video width="220" muted playsinline style="border-radius:12px;">
+        <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+    </video>
+    """,
+    unsafe_allow_html=True
+)
+
+st.rerun()    
+# --- 🛑 Detener el video v1 ---
+       # stop_js = """
+        #<script>
+            #const vids = parent.document.getElementsByTagName('video');
+            #for (let v of vids) { v.pause(); v.currentTime = 0; }
+       # </script>
+        #"""
+        #st.components.v1.html(stop_js, height=0)
 
         # Forzar rerun para que se muestre la respuesta arriba
-        st.rerun()
+       # st.rerun()
 
     # Mostrar historial: último mensaje ARRIBA
     for msg in reversed(st.session_state["history"][-20:]):
