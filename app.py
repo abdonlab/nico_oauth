@@ -320,28 +320,6 @@ with conv_col:
         st.session_state["history"].append({"role": "assistant", "content": reply})
 
         # --- 🛑 Detener el video ---
-        # --- 🛑 Detener el video ---
-stop_js = """
-<script>
-    const vids = parent.document.getElementsByTagName('video');
-    for (let v of vids) { 
-        v.pause(); 
-        v.currentTime = 0; 
-    }
-</script>
-"""
-st.components.v1.html(stop_js, height=0)
-
-# --- 🧊 Mantener el último frame estático ---
-video_container.markdown(
-    f"""
-    <video width="220" muted playsinline style="border-radius:12px;">
-        <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-    </video>
-    """,
-    unsafe_allow_html=True
-)
-        # --- 🛑 Detener el video ---
         stop_js = """
         <script>
             const vids = parent.document.getElementsByTagName('video');
@@ -350,29 +328,22 @@ video_container.markdown(
         """
         st.components.v1.html(stop_js, height=0)
 
-        # 🔄 Refrescar la app
+        # Forzar rerun para que se muestre la respuesta arriba
         st.rerun()
 
-
-# ============================================
-# 🗂 Mostrar historial (últimos 20 mensajes)
-# ============================================
-for msg in reversed(st.session_state["history"][-20:]):
-    if msg["role"] == "user":
-        st.chat_message("user").markdown(msg["content"])
-    else:
-        with st.chat_message("assistant"):
-            st.markdown(
-                f"<div class='chat-bubble'>{msg['content']}</div>",
-                unsafe_allow_html=True
-            )
-
-            if st.session_state["voice_on"]:
-                try:
-                    audio_bytes = synthesize_edge_tts(msg["content"])
-                    st.audio(audio_bytes, format="audio/mp3")
-                except Exception as e:
-                    st.warning(f"Voz no disponible: {e}")
+    # Mostrar historial: último mensaje ARRIBA
+    for msg in reversed(st.session_state["history"][-20:]):
+        if msg["role"] == "user":
+            st.chat_message("user").markdown(msg["content"])
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
+                if st.session_state["voice_on"]:
+                    try:
+                        audio_bytes = synthesize_edge_tts(msg["content"])
+                        st.audio(audio_bytes, format="audio/mp3")
+                    except Exception as e:
+                        st.warning(f"Voz no disponible: {e}")
 
 # ------------------------------------------------------------
 # Versión anterior del bloque de conversación (SOLO REFERENCIA)
