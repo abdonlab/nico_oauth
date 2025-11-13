@@ -287,10 +287,14 @@ if st.button("Enviar") and user_msg.strip():
     st.session_state["history"].append({"role": "user", "content": user_msg})
 
     # --- 🎬 Mostrar video mientras responde ---
-    import random, base64, os
+import random, base64, os
 
-    video_path = f"assets/videos/{random.choice(os.listdir('assets/videos'))}"
-    
+video_folder = "assets/videos"
+video_files = [v for v in os.listdir(video_folder) if v.endswith(".mp4")]
+
+if video_files:
+    video_path = os.path.join(video_folder, random.choice(video_files))
+
     with open(video_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
 
@@ -303,39 +307,27 @@ if st.button("Enviar") and user_msg.strip():
         unsafe_allow_html=True
     )
 
-    # --- 🔮 Generar respuesta ---
-    sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
-    prompt = sys_prompt + "\n\nUsuario: " + user_msg
-    reply  = gemini_generate(prompt, st.session_state["temperature"],
-                                      st.session_state["top_p"],
-                                      st.session_state["max_tokens"])
+# --- 🔮 Generar respuesta ---
+sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
+prompt = sys_prompt + "\n\nUsuario: " + user_msg
 
-    # Guardar respuesta
-    st.session_state["history"].append({"role": "assistant", "content": reply})
+reply = gemini_generate(
+    prompt,
+    st.session_state["temperature"],
+    st.session_state["top_p"],
+    st.session_state["max_tokens"]
+)
 
-    # --- 🛑 Detener video cuando termine ---
-    stop_js = """
-    <script>
-        const vids = parent.document.getElementsByTagName('video');
-        for (let v of vids) { v.pause(); v.currentTime = 0; }
-    </script>
-    """
-    video_container.components.v1.html(stop_js, height=0)
+# Guardar respuesta
+st.session_state["history"].append({"role": "assistant", "content": reply})
 
-    st.rerun()
+# --- 🛑 Detener el video ---
+stop_js = """
+<script>
+    const vids = parent.document.getElementsByTagName('video');
+    for (let v of vids) { v.pause(); v.currentTime = 0; }
+</script>
+"""
+st.components.v1.html(stop_js, height=0)
 
-# ============================
-# Mostrar historial
-# ============================
-for msg in st.session_state["history"][-20:]:
-    if msg["role"] == "user":
-        st.chat_message("user").markdown(msg["content"])
-    else:
-        with st.chat_message("assistant"):
-            st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-            if st.session_state["voice_on"]:
-                try:
-                    audio_bytes = synthesize_edge_tts(msg["content"])
-                    st.audio(audio_bytes, format="audio/mp3")
-                except:
-                    pass
+st.rerun()
