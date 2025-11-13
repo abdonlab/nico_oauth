@@ -341,19 +341,6 @@ video_container.markdown(
 )
 
 st.rerun()    
-# --- 🛑 Detener el video v1 ---
-       # stop_js = """
-        #<script>
-            #const vids = parent.document.getElementsByTagName('video');
-            #for (let v of vids) { v.pause(); v.currentTime = 0; }
-       # </script>
-        #"""
-        #st.components.v1.html(stop_js, height=0)
-
-        # Forzar rerun para que se muestre la respuesta arriba
-       # st.rerun()
-
-    # Mostrar historial: último mensaje ARRIBA
     for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
@@ -366,8 +353,19 @@ st.rerun()
                         st.audio(audio_bytes, format="audio/mp3")
                     except Exception as e:
                         st.warning(f"Voz no disponible: {e}")
+# --- 🛑 Detener el video v1 ---
+       # stop_js = """
+        #<script>
+            #const vids = parent.document.getElementsByTagName('video');
+            #for (let v of vids) { v.pause(); v.currentTime = 0; }
+       # </script>
+        #"""
+        #st.components.v1.html(stop_js, height=0)
 
-# ------------------------------------------------------------
+        # Forzar rerun para que se muestre la respuesta arriba
+       # st.rerun()
+
+    # Mostrar historial: último mensaje ARRIBA# ------------------------------------------------------------
 # Versión anterior del bloque de conversación (SOLO REFERENCIA)
 # (comentada para no borrarla, como me pediste)
 # ------------------------------------------------------------
