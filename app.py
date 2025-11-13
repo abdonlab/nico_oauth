@@ -308,55 +308,59 @@ try:
             </video>
         """
 
-        # 👉 Guardamos el HTML del video para que NO desaparezca después del rerun
+               # 👉 Guardamos el HTML del video para que NO desaparezca después del rerun
         st.session_state["current_video_html"] = html_video
-
         video_container.markdown(html_video, unsafe_allow_html=True)
 
-except Exception as e:
-    st.warning(f"No se pudo reproducir el video: {e}")
+    except Exception as e:
+        st.warning(f"No se pudo reproducir el video: {e}")
 
-        # --- 🔮 Generar respuesta ---
-        # --- 🔮 Generar respuesta ---
-sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
-prompt = sys_prompt + "\n\nUsuario: " + user_msg
-reply = gemini_generate(
-    prompt,
-    st.session_state["temperature"],
-    st.session_state["top_p"],
-    st.session_state["max_tokens"]
-)        
+    # --- 🔮 Generar respuesta ---
+    sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
+    prompt = sys_prompt + "\n\nUsuario: " + user_msg
 
-        # Guardar respuesta en historial
-        st.session_state["history"].append({"role": "assistant", "content": reply})
+    reply = gemini_generate(
+        prompt,
+        st.session_state["temperature"],
+        st.session_state["top_p"],
+        st.session_state["max_tokens"]
+    )
 
-        # --- 🛑 Detener el video ---
-        stop_js = """
-        <script>
-            const vids = parent.document.getElementsByTagName('video');
-            for (let v of vids) { v.pause(); v.currentTime = 0; }
-        </script>
-        """
-        st.components.v1.html(stop_js, height=0)
+    # Guardar respuesta en historial
+    st.session_state["history"].append({
+        "role": "assistant",
+        "content": reply
+    })
 
-        # Forzar rerun para que se muestre la respuesta arriba
-        st.rerun()
+    # --- 🛑 Detener el video ---
+    stop_js = """
+    <script>
+        const vids = parent.document.getElementsByTagName('video');
+        for (let v of vids) { v.pause(); v.currentTime = 0; }
+    </script>
+    """
+    st.components.v1.html(stop_js, height=0)
 
-    # Mostrar historial: último mensaje ARRIBA
-    for msg in reversed(st.session_state["history"][-20:]):
-        if msg["role"] == "user":
-            st.chat_message("user").markdown(msg["content"])
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-                if st.session_state["voice_on"]:
-                    try:
-                        audio_bytes = synthesize_edge_tts(msg["content"])
-                        st.audio(audio_bytes, format="audio/mp3")
-                    except Exception as e:
-                        st.warning(f"Voz no disponible: {e}")
+    # Forzar rerun para que se muestre la respuesta arriba
+    st.rerun()
 
-# ------------------------------------------------------------
+# Mostrar historial: último mensaje ARRIBA
+for msg in reversed(st.session_state["history"][-20:]):
+    if msg["role"] == "user":
+        st.chat_message("user").markdown(msg["content"])
+    else:
+        with st.chat_message("assistant"):
+            st.markdown(
+                f"<div class='chat-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True
+            )
+
+            if st.session_state["voice_on"]:
+                try:
+                    audio_bytes = synthesize_edge_tts(msg["content"])
+                    st.audio(audio_bytes, format="audio/mp3")
+                except Exception as e:
+                    st.warning(f"Voz no disponible: {e}")# ------------------------------------------------------------
 # Versión anterior del bloque de conversación (SOLO REFERENCIA)
 # (comentada para no borrarla, como me pediste)
 # ------------------------------------------------------------
