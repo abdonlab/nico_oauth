@@ -286,7 +286,6 @@ with conv_col:
         # Guardar mensaje del usuario en historial
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
-        # --- 🎬 Mostrar video mientras responde ---
         # --- 🎬 Seleccionar y mostrar video mientras responde ---
 try:
     video_files = []
@@ -303,46 +302,46 @@ try:
             b64 = base64.b64encode(f.read()).decode("utf-8")
 
         html_video = f"""
-            <video width="220" autoplay loop muted playsinline id="nicoVideo" style="border-radius:12px;">
-                <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-            </video>
+        <video width="220" autoplay loop muted playsinline id="nicoVideo" style="border-radius:12px;">
+            <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+        </video>
         """
 
-               # 👉 Guardamos el HTML del video para que NO desaparezca después del rerun
+        # 👉 Guardamos el HTML del video para que NO desaparezca después del rerun
         st.session_state["current_video_html"] = html_video
         video_container.markdown(html_video, unsafe_allow_html=True)
 
-    except Exception as e:
-        st.warning(f"No se pudo reproducir el video: {e}")
+except Exception as e:
+    st.warning(f"No se pudo reproducir el video: {e}")
 
-    # --- 🔮 Generar respuesta ---
-    sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
-    prompt = sys_prompt + "\n\nUsuario: " + user_msg
+# --- 🔮 Generar respuesta ---
+sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
+prompt = sys_prompt + "\n\nUsuario: " + user_msg
 
-    reply = gemini_generate(
-        prompt,
-        st.session_state["temperature"],
-        st.session_state["top_p"],
-        st.session_state["max_tokens"]
-    )
+reply = gemini_generate(
+    prompt,
+    st.session_state["temperature"],
+    st.session_state["top_p"],
+    st.session_state["max_tokens"]
+)
 
-    # Guardar respuesta en historial
-    st.session_state["history"].append({
-        "role": "assistant",
-        "content": reply
-    })
+# Guardar respuesta en historial
+st.session_state["history"].append({
+    "role": "assistant",
+    "content": reply
+})
 
-    # --- 🛑 Detener el video ---
-    stop_js = """
-    <script>
-        const vids = parent.document.getElementsByTagName('video');
-        for (let v of vids) { v.pause(); v.currentTime = 0; }
-    </script>
-    """
-    st.components.v1.html(stop_js, height=0)
+# --- 🛑 Detener el video ---
+stop_js = """
+<script>
+    const vids = parent.document.getElementsByTagName('video');
+    for (let v of vids) { v.pause(); v.currentTime = 0; }
+</script>
+"""
+st.components.v1.html(stop_js, height=0)
 
-    # Forzar rerun para que se muestre la respuesta arriba
-    st.rerun()
+# Forzar rerun para que se muestre la respuesta arriba
+st.rerun()
 
 # Mostrar historial: último mensaje ARRIBA
 for msg in reversed(st.session_state["history"][-20:]):
@@ -360,8 +359,7 @@ for msg in reversed(st.session_state["history"][-20:]):
                     audio_bytes = synthesize_edge_tts(msg["content"])
                     st.audio(audio_bytes, format="audio/mp3")
                 except Exception as e:
-                    st.warning(f"Voz no disponible: {e}")# ------------------------------------------------------------
-# Versión anterior del bloque de conversación (SOLO REFERENCIA)
+                    st.warning(f"Voz no disponible: {e}")# Versión anterior del bloque de conversación (SOLO REFERENCIA)
 # (comentada para no borrarla, como me pediste)
 # ------------------------------------------------------------
 # st.markdown("### 💬 Conversación")
