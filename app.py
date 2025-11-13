@@ -317,14 +317,15 @@ except Exception as e:
     st.warning(f"No se pudo reproducir el video: {e}")
 
         # --- 🔮 Generar respuesta ---
-        sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
-        prompt = sys_prompt + "\n\nUsuario: " + user_msg
-        reply = gemini_generate(
-            prompt,
-            st.session_state["temperature"],
-            st.session_state["top_p"],
-            st.session_state["max_tokens"]
-        )
+        # --- 🔮 Generar respuesta ---
+sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
+prompt = sys_prompt + "\n\nUsuario: " + user_msg
+reply = gemini_generate(
+    prompt,
+    st.session_state["temperature"],
+    st.session_state["top_p"],
+    st.session_state["max_tokens"]
+)        
 
         # Guardar respuesta en historial
         st.session_state["history"].append({"role": "assistant", "content": reply})
