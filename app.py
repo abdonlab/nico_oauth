@@ -339,20 +339,24 @@ video_container.markdown(
     """,
     unsafe_allow_html=True
 )
- st.rerun()    
-    for msg in reversed(st.session_state["history"][-20:]):
-        if msg["role"] == "user":
-            st.chat_message("user").markdown(msg["content"])
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-                if st.session_state["voice_on"]:
-                    try:
-                        audio_bytes = synthesize_edge_tts(msg["content"])
-                        st.audio(audio_bytes, format="audio/mp3")
-                    except Exception as e:
-                        st.warning(f"Voz no disponible: {e}")
-# --- 🛑 Detener el video v1 ---
+st.rerun()
+
+# Mostrar historial: último mensaje ARRIBA
+for msg in reversed(st.session_state["history"][-20:]):
+    if msg["role"] == "user":
+        st.chat_message("user").markdown(msg["content"])
+    else:
+        with st.chat_message("assistant"):
+            st.markdown(
+                f"<div class='chat-bubble'>{msg['content']}</div>",
+                unsafe_allow_html=True
+            )
+            if st.session_state["voice_on"]:
+                try:
+                    audio_bytes = synthesize_edge_tts(msg["content"])
+                    st.audio(audio_bytes, format="audio/mp3")
+                except Exception as e:
+                    st.warning(f"Voz no disponible: {e}")# --- 🛑 Detener el video v1 ---
        # stop_js = """
         #<script>
             #const vids = parent.document.getElementsByTagName('video');
