@@ -247,7 +247,12 @@ conv_col, video_col = st.columns([0.7, 0.3])
 # Contenedor para el video a la derecha
 with video_col:
     video_container = st.empty()  # aquí se incrusta el video pequeño
-
+    # 🔄 Si ya hay un video cargado en sesión, mostrarlo
+if "current_video_html" in st.session_state:
+    video_container.markdown(
+        st.session_state["current_video_html"],
+        unsafe_allow_html=True
+    )
 # ============================
 # UI de conversación (lado izq.)
 # ============================
@@ -282,29 +287,34 @@ with conv_col:
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
         # --- 🎬 Mostrar video mientras responde ---
-        try:
-            video_files = []
-            if os.path.isdir("assets/videos"):
-                for fname in os.listdir("assets/videos"):
-                    if fname.lower().endswith((".mp4", ".webm", ".ogg", ".ogv")):
-                        video_files.append(fname)
+        # --- 🎬 Seleccionar y mostrar video mientras responde ---
+try:
+    video_files = []
+    if os.path.isdir("assets/videos"):
+        for fname in os.listdir("assets/videos"):
+            if fname.lower().endswith((".mp4", ".webm", ".ogg", ".ogv")):
+                video_files.append(fname)
 
-            if video_files:
-                chosen = random.choice(video_files)
-                video_path = os.path.join("assets/videos", chosen)
-                with open(video_path, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode("utf-8")
+    if video_files:
+        chosen = random.choice(video_files)
+        video_path = os.path.join("assets/videos", chosen)
 
-                video_container.markdown(
-                    f"""
-                    <video width="220" autoplay loop muted playsinline style="border-radius:12px;">
-                        <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-                    </video>
-                    """,
-                    unsafe_allow_html=True
-                )
-        except Exception as e:
-            st.warning(f"No se pudo reproducir el video: {e}")
+        with open(video_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+
+        html_video = f"""
+            <video width="220" autoplay loop muted playsinline id="nicoVideo" style="border-radius:12px;">
+                <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+            </video>
+        """
+
+        # 👉 Guardamos el HTML del video para que NO desaparezca después del rerun
+        st.session_state["current_video_html"] = html_video
+
+        video_container.markdown(html_video, unsafe_allow_html=True)
+
+except Exception as e:
+    st.warning(f"No se pudo reproducir el video: {e}")
 
         # --- 🔮 Generar respuesta ---
         sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
