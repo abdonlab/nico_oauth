@@ -308,9 +308,7 @@ with col_chat:
         </script>
         """
         st.components.v1.html(stop_js, height=0)
-
-        st.experimental_rerun()
-
+        st.rerun()
 # --------- VIDEO A LA DERECHA ---------
 with col_video:
     st.markdown("### 🎬 NICO en acción")
