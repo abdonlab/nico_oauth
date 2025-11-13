@@ -339,8 +339,7 @@ video_container.markdown(
     """,
     unsafe_allow_html=True
 )
-
-st.rerun()    
+ st.rerun()    
     for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
