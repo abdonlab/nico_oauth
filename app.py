@@ -344,7 +344,15 @@ with conv_col:
                         st.audio(audio_bytes, format="audio/mp3")
                     except Exception as e:
                         st.warning(f"Voz no disponible: {e}")
-
+                        # Detener el video cuando la respuesta termina
+            pause_js = """
+            <script>
+            const v = parent.document.querySelector('video');
+            if (v) { v.pause(); v.currentTime = 0; }
+            </script>
+            """
+            st.components.v1.html(pause_js, height=0)
+            break
 # ------------------------------------------------------------
 # Versión anterior del bloque de conversación (SOLO REFERENCIA)
 # (comentada para no borrarla, como me pediste)
