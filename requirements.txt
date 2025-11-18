@@ -4,3 +4,4 @@ google-auth==2.33.0
 google-auth-oauthlib==1.2.1
 requests
 edge-tts==6.1.12
+edge-tts
