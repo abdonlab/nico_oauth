@@ -1,5 +1,5 @@
 # ============================================================
-# NICO OAuth + Gemini (VERSIÓN FINAL FIJA + FIX VIDEO)
+# NICO OAuth + Gemini (VERSIÓN FINAL con VIDEO FIJO + VOZ)
 # ============================================================
 
 import os
@@ -7,7 +7,7 @@ import re
 import urllib.parse
 import json
 import base64
-import random  # para elegir video aleatorio
+import random
 import requests
 import streamlit as st
 from google_auth_oauthlib.flow import Flow
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 import uuid
 
 # ------------------------------------------------------------
-# Configuración inicial
+# Streamlit Config
 # ------------------------------------------------------------
 st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖", layout="wide")
 
@@ -44,8 +44,9 @@ SCOPES = [
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 GEMINI_MODEL   = st.secrets.get("GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-001"))
 
+
 # ------------------------------------------------------------
-# Funciones auxiliares
+# OAuth Flow
 # ------------------------------------------------------------
 def get_flow(state=None):
     client_config = {
@@ -67,6 +68,9 @@ def get_flow(state=None):
     return flow
 
 
+# ------------------------------------------------------------
+# Session defaults
+# ------------------------------------------------------------
 def ensure_session_defaults():
     st.session_state.setdefault("logged", False)
     st.session_state.setdefault("profile", {})
@@ -78,6 +82,9 @@ def ensure_session_defaults():
     st.session_state.setdefault("current_video", None)
 
 
+# ------------------------------------------------------------
+# UI Header
+# ------------------------------------------------------------
 def header_html():
     video_path = "assets/videos/nico_header_video.mp4"
     if os.path.exists(video_path):
@@ -112,13 +119,12 @@ def header_html():
     """
 
 
+# ------------------------------------------------------------
+# Login
+# ------------------------------------------------------------
 def login_view():
     st.markdown(header_html(), unsafe_allow_html=True)
     st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
-
-    if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
-        st.error("Faltan variables de configuración.")
-        return
 
     if "oauth_state" not in st.session_state:
         st.session_state["oauth_state"] = str(uuid.uuid4())
@@ -137,32 +143,34 @@ def login_view():
     st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 
+# ------------------------------------------------------------
+# Token exchange
+# ------------------------------------------------------------
 def exchange_code_for_token():
     params = st.experimental_get_query_params()
     if "code" not in params or "state" not in params:
         return
     try:
-        code  = params["code"][0]
+        code = params["code"][0]
         state = params["state"][0]
 
         if "oauth_state" not in st.session_state:
             st.session_state["oauth_state"] = state
 
-        if state != st.session_state.get("oauth_state"):
-            st.warning("⚠️ El estado OAuth se regeneró automáticamente.")
+        if state != st.session_state["oauth_state"]:
             st.session_state["oauth_state"] = state
 
         flow = get_flow(state=state)
         flow.fetch_token(code=code)
         creds = flow.credentials
 
-        request = grequests.Request()
-        idinfo  = id_token.verify_oauth2_token(creds.id_token, request, CLIENT_ID)
+        req = grequests.Request()
+        idinfo = id_token.verify_oauth2_token(creds.id_token, req, CLIENT_ID)
 
-        st.session_state["logged"]  = True
+        st.session_state["logged"] = True
         st.session_state["profile"] = {
-            "email":   idinfo.get("email"),
-            "name":    idinfo.get("name"),
+            "email": idinfo.get("email"),
+            "name": idinfo.get("name"),
             "picture": idinfo.get("picture")
         }
 
@@ -173,10 +181,13 @@ def exchange_code_for_token():
         st.error(f"Error al autenticar: {e}")
 
 
-def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
+# ------------------------------------------------------------
+# Gemini API
+# ------------------------------------------------------------
+def gemini_generate(prompt, temperature, top_p, max_tokens):
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    headers  = {"Content-Type": "application/json"}
-    payload  = {
+
+    payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": float(temperature),
@@ -184,25 +195,30 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
             "maxOutputTokens": int(max_tokens)
         }
     }
+
     try:
-        r = requests.post(endpoint, headers=headers, json=payload, timeout=30)
+        r = requests.post(endpoint, json=payload, timeout=30)
         r.raise_for_status()
         data = r.json()
+
         text = ""
         for cand in data.get("candidates", []):
             for part in cand.get("content", {}).get("parts", []):
                 text += part.get("text", "")
+
         return text.strip()
+
     except Exception as e:
         return f"⚠️ Error con Gemini: {e}"
 
+
 # ============================================================
-# Lógica principal
+# LÓGICA PRINCIPAL
 # ============================================================
 ensure_session_defaults()
 exchange_code_for_token()
 
-if not st.session_state.get("logged"):
+if not st.session_state["logged"]:
     login_view()
     st.stop()
 
@@ -212,29 +228,20 @@ conv_col, video_col = st.columns([0.7, 0.3])
 
 with video_col:
     video_container = st.empty()
+
+    # Render video guardado en sesión
     if st.session_state["current_video"]:
         video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
 
-
 with conv_col:
 
-    c1, c2, c3 = st.columns([0.1, 0.1, 0.8])
+    c1, c2, c3 = st.columns([0.15, 0.15, 0.7])
     with c1:
-        if st.button("🎙️ Voz: ON" if st.session_state["voice_on"] else "🔇 Voz: OFF"):
+        if st.button("🔊 Voz ON" if st.session_state["voice_on"] else "🔇 Voz OFF"):
             st.session_state["voice_on"] = not st.session_state["voice_on"]
-    with c2:
-        if st.button("⚙️ Config"):
-            st.session_state["open_cfg"] = True
-    with c3:
-        st.write(f"Bienvenido, **{st.session_state['profile'].get('name')}**")
 
-    if st.session_state.get("open_cfg"):
-        with st.popover("Configuración del Modelo"):
-            st.slider("Temperatura", 0.0, 1.5, key="temperature")
-            st.slider("Top-P", 0.0, 1.0, key="top_p")
-            st.slider("Máx. tokens", 64, 2048, key="max_tokens", step=32)
-            if st.button("Cerrar"):
-                st.session_state["open_cfg"] = False
+    with c3:
+        st.write(f"Bienvenido, **{st.session_state['profile'].get('name', 'Usuario')}**")
 
     st.markdown("### 💬 Conversación")
 
@@ -242,11 +249,12 @@ with conv_col:
 
     if st.button("Enviar") and user_msg.strip():
 
+        # Guardar mensaje
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
-        # --------------------------
-        # Seleccionar y mostrar video
-        # --------------------------
+        # ---------------------
+        # VIDEO ALEATORIO
+        # ---------------------
         try:
             video_files = [
                 f for f in os.listdir("assets/videos")
@@ -255,9 +263,9 @@ with conv_col:
 
             if video_files:
                 chosen = random.choice(video_files)
-                video_path = os.path.join("assets/videos", chosen)
+                path = os.path.join("assets/videos", chosen)
 
-                with open(video_path, "rb") as f:
+                with open(path, "rb") as f:
                     b64 = base64.b64encode(f.read()).decode("utf-8")
 
                 html_video = f"""
@@ -272,9 +280,9 @@ with conv_col:
         except Exception as e:
             st.warning(f"No se pudo reproducir el video: {e}")
 
-        # --------------------------
-        # Generar respuesta
-        # --------------------------
+        # ---------------------
+        # RESPUESTA IA
+        # ---------------------
         sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
         prompt = sys_prompt + "\n\nUsuario: " + user_msg
 
@@ -287,40 +295,34 @@ with conv_col:
 
         st.session_state["history"].append({"role": "assistant", "content": reply})
 
-        # Sólo pausar video
+        # PAUSAR VIDEO
         pause_js = """
         <script>
-            const vids = parent.document.getElementsByTagName('video');
-            for (let v of vids) { v.pause(); }
+        const vids = parent.document.getElementsByTagName('video');
+        for (let v of vids) { v.pause(); }
         </script>
         """
         st.components.v1.html(pause_js, height=0)
 
         st.rerun()
 
-    # ---------------------------
-    # Mostrar historial
-    # ---------------------------
+    # ---------------------
+    # MOSTRAR HISTORIAL
+    # ---------------------
     for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
+
         else:
             with st.chat_message("assistant"):
-                st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>",
-                            unsafe_allow_html=True)
+                st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
 
+                # 🔊 TTS AQUÍ
                 if st.session_state["voice_on"]:
-                    try:
-                        audio_bytes = synthesize_edge_tts(msg["content"])
+                    audio_bytes = synthesize_edge_tts(msg["content"])
+                    if audio_bytes:
                         st.audio(audio_bytes, format="audio/mp3")
-                    except:
+                    else:
                         st.warning("Voz no disponible.")
 
-            pause_js = """
-            <script>
-            const v = parent.document.querySelector('video');
-            if (v) { v.pause(); }
-            </script>
-            """
-            st.components.v1.html(pause_js, height=0)
             break
