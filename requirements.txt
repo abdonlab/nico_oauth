@@ -1,6 +1,7 @@
+Tengo estos ahorita:
 streamlit==1.38.0
 python-dotenv
 google-auth==2.33.0
 google-auth-oauthlib==1.2.1
 requests
-google-cloud-texttospeech
+edge-tts==6.1.12
