@@ -25,8 +25,6 @@ st.set_page_config(page_title="NICO | Asistente Virtual UMSNH", page_icon="🤖"
 # ============================================================
 # 🔧 FIX 1: Manejar redirección desde /oauth2callback
 # ============================================================
-# Cuando Google intenta regresar a /oauth2callback, Streamlit no tiene esa ruta.
-# Este bloque redirige automáticamente a la raíz "/" conservando los parámetros.
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
     parsed = urllib.parse.urlparse(_request_uri)
@@ -42,11 +40,8 @@ load_dotenv()
 CLIENT_ID     = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
 CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", ""))
 
-# 🔧 Antes usaba "/oauth2callback", pero Streamlit Cloud no lo soporta.
-# GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/oauth2callback")
-GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/")  # ✅ FIX
+GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/")
 
-# 🔧 Scopes actualizados según Google 2024
 SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
@@ -57,7 +52,7 @@ GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""
 GEMINI_MODEL   = st.secrets.get("GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-001"))
 
 # ============================================================
-# 🔧 Helper: Crear flujo OAuth correctamente
+# 🔧 Helper: Crear flujo OAuth
 # ============================================================
 def get_flow(state=None):
     client_config = {
@@ -66,7 +61,6 @@ def get_flow(state=None):
             "client_secret": CLIENT_SECRET,
             "auth_uri":  "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            # 🔧 Registramos URIs principales compatibles
             "redirect_uris": [
                 "https://nicooapp-umsnh.streamlit.app/",
                 "http://localhost:8501/",
@@ -96,7 +90,7 @@ def ensure_session_defaults():
     st.session_state.setdefault("max_tokens", 256)
 
 # ============================================================
-# UI original — sin modificar nada visual del header
+# UI header
 # ============================================================
 def header_html():
     video_path = "assets/videos/nico_header_video.mp4"
@@ -132,7 +126,7 @@ def header_html():
     """
 
 # ============================================================
-# Vista de login
+# Vista login
 # ============================================================
 def login_view():
     st.markdown(header_html(), unsafe_allow_html=True)
@@ -142,25 +136,24 @@ def login_view():
         st.error("Faltan GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI.")
         return
 
-    # ✅ FIX: Generamos un state persistente con UUID para evitar mismatches
     if "oauth_state" not in st.session_state:
         st.session_state["oauth_state"] = str(uuid.uuid4())
 
     state_key = st.session_state["oauth_state"]
     flow = get_flow(state=state_key)
-    # Utilizamos state=state_key en la URL para evitar estados inválidos
+
     auth_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes=False,
         prompt="consent",
         state=state_key
     )
-    # Guardamos el state también en la URL para recuperación
+
     st.experimental_set_query_params(oauth_state=state_key)
     st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 # ============================================================
-# Intercambio del código OAuth por token
+# OAuth: intercambio de token
 # ============================================================
 def exchange_code_for_token():
     params = st.experimental_get_query_params()
@@ -170,14 +163,9 @@ def exchange_code_for_token():
         code  = params["code"][0]
         state = params["state"][0]
 
-        # 🩵 FIX: Si Streamlit perdió el estado por un rerun, lo restablecemos
         if "oauth_state" not in st.session_state:
             st.session_state["oauth_state"] = state
 
-        # Comentamos el error estricto y sincronizamos el estado
-        # if state != st.session_state.get("oauth_state"):
-        #     st.error("Estado OAuth inválido.")
-        #     return
         if state != st.session_state.get("oauth_state"):
             st.warning("⚠️ El estado OAuth se regeneró automáticamente.")
             st.session_state["oauth_state"] = state
@@ -203,7 +191,7 @@ def exchange_code_for_token():
         st.error(f"Error al autenticar: {e}")
 
 # ============================================================
-# Generador de texto con Gemini
+# Gemini API
 # ============================================================
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
@@ -238,21 +226,15 @@ if not st.session_state.get("logged"):
     login_view()
     st.stop()
 
-# --- HEADER (igual que antes) ---
 st.markdown(header_html(), unsafe_allow_html=True)
 
-# 🔹 Creamos columnas: conversación a la izquierda, video a la derecha
 conv_col, video_col = st.columns([0.7, 0.3])
 
-# Contenedor para el video a la derecha
 with video_col:
-    video_container = st.empty()  # aquí se incrusta el video pequeño
+    video_container = st.empty()
 
-# ============================
-# UI de conversación (lado izq.)
-# ============================
 with conv_col:
-    # Barra de controles superior (igual que antes)
+
     c1, c2, c3 = st.columns([0.1, 0.1, 0.8])
     with c1:
         if st.button("🎙️ Voz: ON" if st.session_state["voice_on"] else "🔇 Voz: OFF"):
@@ -273,15 +255,12 @@ with conv_col:
 
     st.markdown("### 💬 Conversación")
 
-    # Input de usuario
     user_msg = st.text_input("Escribe tu pregunta:")
 
-    # Botón Enviar + lógica de respuesta + video
     if st.button("Enviar") and user_msg.strip():
-        # Guardar mensaje del usuario en historial
+
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
-        # --- 🎬 Mostrar video mientras responde ---
         try:
             video_files = []
             if os.path.isdir("assets/videos"):
@@ -306,7 +285,6 @@ with conv_col:
         except Exception as e:
             st.warning(f"No se pudo reproducir el video: {e}")
 
-        # --- 🔮 Generar respuesta ---
         sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
         prompt = sys_prompt + "\n\nUsuario: " + user_msg
         reply = gemini_generate(
@@ -316,22 +294,24 @@ with conv_col:
             st.session_state["max_tokens"]
         )
 
-        # Guardar respuesta en historial
         st.session_state["history"].append({"role": "assistant", "content": reply})
 
-        # --- 🛑 Detener el video ---
+        # ----------------------------------------------------
+        # 🟦 CORRECCIÓN: solo PAUSAR el video, no reiniciar
+        # ----------------------------------------------------
         stop_js = """
         <script>
             const vids = parent.document.getElementsByTagName('video');
-            for (let v of vids) { v.pause(); v.currentTime = 0; }
+            for (let v of vids) { v.pause(); }
         </script>
         """
         st.components.v1.html(stop_js, height=0)
 
-        # Forzar rerun para que se muestre la respuesta arriba
         st.rerun()
 
-    # Mostrar historial: último mensaje ARRIBA
+    # ----------------------------------------------------
+    # Mostrar historial
+    # ----------------------------------------------------
     for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
@@ -344,100 +324,15 @@ with conv_col:
                         st.audio(audio_bytes, format="audio/mp3")
                     except Exception as e:
                         st.warning(f"Voz no disponible: {e}")
-                        # Detener el video cuando la respuesta termina
+
+            # ----------------------------------------------------
+            # 🟦 CORRECCIÓN: solo PAUSAR, sin reset de tiempo
+            # ----------------------------------------------------
             pause_js = """
             <script>
             const v = parent.document.querySelector('video');
-            if (v) { v.pause(); v.currentTime = 0; }
+            if (v) { v.pause(); }
             </script>
             """
             st.components.v1.html(pause_js, height=0)
             break
-# ------------------------------------------------------------
-# Versión anterior del bloque de conversación (SOLO REFERENCIA)
-# (comentada para no borrarla, como me pediste)
-# ------------------------------------------------------------
-# st.markdown("### 💬 Conversación")
-#
-# # Contenedor del video (siempre arriba del chat)
-# video_container = st.empty()
-#
-# user_msg = st.text_input("Escribe tu pregunta:")
-#
-# if st.button("Enviar") and user_msg.strip():
-#
-#     # Guardar mensaje del usuario
-#     st.session_state["history"].append({
-#         "role": "user",
-#         "content": user_msg
-#     })
-#
-#     # --- 🎬 Mostrar video mientras responde ---
-#     import random, base64, os
-#
-#     try:
-#         video_files = os.listdir("assets/videos")
-#         video_path = f"assets/videos/{random.choice(video_files)}"
-#
-#         with open(video_path, "rb") as f:
-#             b64 = base64.b64encode(f.read()).decode("utf-8")
-#
-#         video_container.markdown(
-#             f"""
-#             <video width="180" autoplay loop muted playsinline style="border-radius:10px; float:right; margin:5px;">
-#                 <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-#             </video>
-#             """,
-#             unsafe_allow_html=True
-#         )
-#     except Exception as e:
-#         st.warning(f"No se pudo cargar video: {e}")
-#
-#     # --- 🔮 Generar respuesta ---
-#     sys_prompt = "Eres NICO, asistente institucional de la UMSNH. Responde en español."
-#     prompt = sys_prompt + "\n\nUsuario: " + user_msg
-#
-#     reply = gemini_generate(
-#         prompt,
-#         st.session_state["temperature"],
-#         st.session_state["top_p"],
-#         st.session_state["max_tokens"]
-#     )
-#
-#     # Guardar respuesta
-#     st.session_state["history"].append({
-#         "role": "assistant",
-#         "content": reply
-#     })
-#
-#     # --- 🛑 Detener el video ---
-#     stop_js = """
-#     <script>
-#         const vids = parent.document.getElementsByTagName('video');
-#         for (let v of vids) { v.pause(); v.currentTime = 0; }
-#     </script>
-#     """
-#     st.components.v1.html(stop_js, height=0)
-#
-#     st.rerun()
-#
-#
-# # 🗂 Mostrar historial (últimos 20)
-# for msg in st.session_state["history"][-20:]:
-#
-#     if msg["role"] == "user":
-#         st.chat_message("user").markdown(msg["content"])
-#
-#     else:
-#         with st.chat_message("assistant"):
-#             st.markdown(
-#                 f"<div class='chat-bubble'>{msg['content']}</div>",
-#                 unsafe_allow_html=True
-#             )
-#
-#             if st.session_state["voice_on"]:
-#                 try:
-#                     audio_bytes = synthesize_edge_tts(msg["content"])
-#                     st.audio(audio_bytes, format="audio/mp3")
-#                 except Exception as e:
-#                     st.warning(f"Voz no disponible: {e}")
