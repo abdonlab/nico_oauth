@@ -500,9 +500,9 @@ with conv_col:
         if not st.session_state["greeted"]:
             name = st.session_state["profile"].get("name", "")
             if name:
-                saludo = f"Hola {name}, soy NICO, tu asistente virtual de la UMSNH.\n\n"
+                saludo = f"Hola {name}, soy NICO, tu asistente virtual de la Universidad Michoacana.\n\n"
             else:
-                saludo = "Hola, soy NICO, tu asistente virtual de la UMSNH.\n\n"
+                saludo = "Hola, soy NICO.\n\n"
             reply = saludo + (reply or "")
             st.session_state["greeted"] = True
 
