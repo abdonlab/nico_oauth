@@ -1,5 +1,6 @@
-streamlit==1.38.0
-python-dotenv
+streamlit==1.39.0
 google-auth==2.33.0
 google-auth-oauthlib==1.2.1
+google-cloud-texttospeech==2.16.3
 requests
+python-dotenv
