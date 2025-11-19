@@ -1,6 +1,5 @@
 # ============================================================
-# NICO OAuth + Gemini 2.0 Flash-Lite + Voz en Navegador
-# (Web Search + saludo único + voz grave + icono fijo)
+# NICO OAuth + Gemini 2.0 Flash-Lite + Voz Sincronizada + Web Search
 # ============================================================
 
 import os
@@ -24,12 +23,12 @@ from dotenv import load_dotenv
 # ------------------------------------------------------------
 st.set_page_config(
     page_title="NICO | Asistente Virtual UMSNH",
-    page_icon="🦊",
+    page_icon="🤖",
     layout="wide",
 )
 
 # ------------------------------------------------------------
-# FIX redirección /oauth2callback
+# FIX redirección /oauth2callback en Streamlit Cloud
 # ------------------------------------------------------------
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
@@ -39,7 +38,7 @@ if "/oauth2callback" in _request_uri:
     st.experimental_rerun()
 
 # ------------------------------------------------------------
-# Variables de entorno
+# Cargar variables de entorno
 # ------------------------------------------------------------
 load_dotenv()
 
@@ -49,12 +48,7 @@ GOOGLE_REDIRECT_URI = st.secrets.get(
     "GOOGLE_REDIRECT_URI",
     os.getenv("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/"),
 )
-
-SCOPES = [
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-]
+SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"]
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 GEMINI_MODEL = st.secrets.get("GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-001"))
@@ -91,90 +85,39 @@ def ensure_session_defaults():
     st.session_state.setdefault("max_tokens", 256)
     st.session_state.setdefault("current_video", None)
     st.session_state.setdefault("open_cfg", False)
-    st.session_state.setdefault("greeted", False)
 
-
-# ============================================================
-# 🔵 HEADER CON ICONO (NO VIDEO)
-# ============================================================
 
 def header_html():
-    """Cabecera con icono circular institucional."""
-    icon_path = "assets/img/nico_icon.png"
-
-    if os.path.exists(icon_path):
-        with open(icon_path, "rb") as f:
+    video_path = "assets/videos/nico_header_video.mp4"
+    if os.path.exists(video_path):
+        with open(video_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("utf-8")
-        icon_tag = f"""
-        <img class="nico-icon" src="data:image/png;base64,{b64}" />
-        """
+        tag = f"""<video class="nico-video" autoplay loop muted playsinline>
+            <source src="data:video/mp4;base64,{b64}" type="video/mp4"></video>"""
     else:
-        icon_tag = '<div class="nico-placeholder"></div>'
+        tag = '<div class="nico-placeholder"></div>'
 
     return f"""
     <style>
-    .nico-header {{
-        background:#0f2347;
-        color:#fff;
-        padding:16px 20px;
-        border-radius:8px;
-    }}
-    .nico-wrap {{
-        display:flex;
-        align-items:center;
-        gap:16px;
-    }}
-    .nico-icon {{
-        width:56px;
-        height:56px;
-        border-radius:50%;
-        object-fit:cover;
-        background:white;
-    }}
-    .nico-placeholder {{
-        width:56px;
-        height:56px;
-        border-radius:50%;
-        background:white;
-    }}
-    .nico-title {{
-        font-size:26px;
-        font-weight:800;
-        margin:0;
-    }}
-    .nico-subtitle {{
-        margin:0;
-        font-size:18px;
-        opacity:.9;
-    }}
-    .chat-bubble {{
-        background:#f8fbff;
-        border:2px solid #dfe8f9;
-        border-radius:14px;
-        padding:18px;
-        margin-top:12px;
-    }}
+    .nico-header {{ background:#0f2347; color:#fff; padding:16px 20px; border-radius:8px; }}
+    .nico-wrap {{ display:flex; align-items:center; gap:16px; }}
+    .nico-video {{ width:56px; height:56px; border-radius:50%; object-fit:cover; }}
+    .nico-title {{ font-size:26px; font-weight:800; margin:0; }}
+    .nico-subtitle {{ font-size:18px; opacity:.9; margin:0; }}
+    .chat-bubble {{ background:#f8fbff; border:2px solid #dfe8f9; border-radius:14px; padding:18px; margin-top:12px; }}
     </style>
-
     <div class="nico-header">
-        <div class="nico-wrap">
-            {icon_tag}
-            <div>
-                <p class="nico-title">NICO</p>
-                <p class="nico-subtitle">Asistente Virtual UMSNH</p>
-            </div>
-        </div>
+        <div class="nico-wrap">{tag}<div>
+            <p class="nico-title">NICO</p>
+            <p class="nico-subtitle">Asistente Virtual UMSNH</p>
+        </div></div>
     </div>
     """
 
 
-# ============================================================
-# Pantalla de Login
-# ============================================================
-
 def login_view():
     st.markdown(header_html(), unsafe_allow_html=True)
-    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
+    st.info("Inicia sesión con Google para usar NICO.")
 
     if not CLIENT_ID or not CLIENT_SECRET:
         st.error("Faltan variables OAuth.")
@@ -185,9 +128,7 @@ def login_view():
 
     flow = get_flow(st.session_state["oauth_state"])
     auth_url, _ = flow.authorization_url(
-        access_type="offline",
-        prompt="consent",
-        state=st.session_state["oauth_state"]
+        access_type="offline", include_granted_scopes=False, prompt="consent", state=st.session_state["oauth_state"]
     )
 
     st.experimental_set_query_params(oauth_state=st.session_state["oauth_state"])
@@ -220,13 +161,12 @@ def exchange_code_for_token():
         st.rerun()
 
     except Exception as e:
-        st.error(f"Error al autenticar: {e}")
+        st.error(f"Error OAuth: {e}")
 
 
 # ============================================================
-# Gemini con búsqueda web
+# Gemini con búsqueda en internet
 # ============================================================
-
 def gemini_generate(prompt, temperature, top_p, max_tokens):
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
@@ -241,18 +181,14 @@ def gemini_generate(prompt, temperature, top_p, max_tokens):
     }
 
     try:
-        r = requests.post(
-            endpoint,
-            headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-            json=payload,
-        )
+        r = requests.post(endpoint, headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"}, json=payload)
         r.raise_for_status()
         data = r.json()
 
         text = ""
-        for c in data.get("candidates", []):
-            for p in c.get("content", {}).get("parts", []):
-                text += p.get("text", "")
+        for cand in data.get("candidates", []):
+            for part in cand.get("content", {}).get("parts", []):
+                text += part.get("text", "")
 
         return text.strip()
 
@@ -261,9 +197,8 @@ def gemini_generate(prompt, temperature, top_p, max_tokens):
 
 
 # ============================================================
-# Voz masculina + sincronización con video
+# 🔥 SINCRONIZACIÓN VIDEO + VOZ
 # ============================================================
-
 def speak_browser(text):
     if not text:
         return
@@ -283,19 +218,21 @@ def speak_browser(text):
 
             const voices = synth.getVoices();
             let chosen = null;
-
-            const prefer = ["rocko","miguel","diego","jorge","pablo","male","hombre"];
+            const prefer = ["miguel","pablo","diego","jorge","hombre","male"];
 
             for(const v of voices){{
-                if((v.lang||"").toLowerCase().startsWith("es")){
-                    if(prefer.some(p => (v.name||"").toLowerCase().includes(p))){
-                        chosen = v; break;
-                    }
-                }
+                const lang = (v.lang||"").toLowerCase();
+                const nm = (v.name||"").toLowerCase();
+                if(lang.startsWith("es")){{
+                    for(const p of prefer){{
+                        if(nm.includes(p)){{ chosen = v; break; }}
+                    }}
+                }}
+                if(chosen) break;
             }}
 
             if(!chosen){{
-                chosen = voices.find(v => (v.lang||"").toLowerCase().startsWith("es"));
+                chosen = voices.find(v=> (v.lang||"").toLowerCase().startsWith("es"));
             }}
 
             if(chosen) utter.voice = chosen;
@@ -306,24 +243,26 @@ def speak_browser(text):
             utter.onstart = () => {{
                 const v = parent.document.querySelector('video');
                 if(v) v.play();
-            }};
+            }}
 
             utter.onend = () => {{
                 const v = parent.document.querySelector('video');
                 if(v) v.pause();
-            }};
+            }}
 
             synth.speak(utter);
         }}
 
-        if(synth.getVoices().length===0) synth.onvoiceschanged = speak;
-        else speak();
+        if(synth.getVoices().length===0){{
+            synth.onvoiceschanged = speak;
+        }} else {{
+            speak();
+        }}
     }})();
     </script>
     """
 
     components.html(js, height=0)
-
 
 # ============================================================
 # App principal
@@ -336,20 +275,22 @@ if not st.session_state["logged"]:
     login_view()
     st.stop()
 
-# Mostrar cabecera
+# Cabecera
 st.markdown(header_html(), unsafe_allow_html=True)
 
-# Layout
+# Layout principal
 conv_col, video_col = st.columns([0.7, 0.3])
 
-# Columna video (para sincronización)
+# -------------------- VIDEO --------------------
 with video_col:
-    video_box = st.empty()
+    video_container = st.empty()
     if st.session_state["current_video"]:
-        video_box.markdown(st.session_state["current_video"], unsafe_allow_html=True)
+        video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
 
-# Columna chat
+# -------------------- CHAT --------------------
 with conv_col:
+
+    # Controles superiores
     c1, c2, c3 = st.columns([0.15, 0.15, 0.7])
 
     with c1:
@@ -377,6 +318,7 @@ with conv_col:
 
     if st.button("Enviar") and user_msg.strip():
 
+        # Guardar mensaje
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
         # Video aleatorio
@@ -387,22 +329,25 @@ with conv_col:
                 path = os.path.join("assets/videos", v)
                 with open(path, "rb") as f:
                     b64 = base64.b64encode(f.read()).decode("utf-8")
+
                 html_video = f"""
                 <video width="240" autoplay muted playsinline loop style="border-radius:12px;">
                     <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-                </video>
-                """
+                </video>"""
+
                 st.session_state["current_video"] = html_video
-                video_box.markdown(html_video, unsafe_allow_html=True)
-        except:
-            pass
+                video_container.markdown(html_video, unsafe_allow_html=True)
+
+        except Exception as e:
+            st.warning(f"Video error: {e}")
 
         # Prompt
         sys_prompt = (
             "Eres NICO, asistente oficial de la UMSNH. "
-            "Usa búsqueda web cuando sea necesario y prioriza sitios *.umich.mx."
+            "Usa búsqueda web cuando sea necesario, prioriza sitios *.umich.mx."
         )
-        full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
+
+        full_prompt = f"{sys_prompt}\nUsuario: {user_msg}"
 
         reply = gemini_generate(
             full_prompt,
@@ -410,13 +355,6 @@ with conv_col:
             st.session_state["top_p"],
             st.session_state["max_tokens"],
         )
-
-        # Saludo ÚNICO
-        if not st.session_state["greeted"]:
-            name = st.session_state["profile"].get("name", "usuario")
-            saludo = f"Hola {name}, soy NICO — tu asistente virtual de la UMSNH.\n\n"
-            reply = saludo + reply
-            st.session_state["greeted"] = True
 
         st.session_state["history"].append({"role": "assistant", "content": reply})
         st.rerun()
@@ -427,10 +365,7 @@ with conv_col:
             st.chat_message("user").markdown(msg["content"])
         else:
             with st.chat_message("assistant"):
-                st.markdown(
-                    f"<div class='chat-bubble'>{msg['content']}</div>",
-                    unsafe_allow_html=True,
-                )
+                st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
+
                 if st.session_state["voice_on"]:
                     speak_browser(msg["content"])
-            break
