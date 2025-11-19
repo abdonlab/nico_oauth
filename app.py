@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 # ------------------------------------------------------------
 st.set_page_config(
     page_title="NICO | Asistente Virtual UMSNH",
-    page_icon="🤖",
+    page_icon="🦊",
     layout="wide",
 )
 
