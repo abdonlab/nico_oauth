@@ -1,5 +1,5 @@
 # ============================================================
-# NICO OAuth + Gemini 2.0 Flash-Lite + Voz en Navegador
+# NICO OAuth + Gemini 2.0 Flash-Lite + Voz en Navegador + Web Search (Vertex AI)
 # (sin service accounts ni Edge-TTS)
 # ============================================================
 
@@ -52,15 +52,24 @@ GOOGLE_REDIRECT_URI = st.secrets.get(
     os.getenv("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/"),
 )
 
+# 🔴 IMPORTANTE: añadimos cloud-platform para poder llamar a Vertex AI Search
 SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/cloud-platform",
 ]
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 GEMINI_MODEL = st.secrets.get(
     "GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-001")
+)
+
+# Endpoint de búsqueda web en Vertex AI Search (engine nico-web-ai)
+DISCOVERY_SEARCH_URL = (
+    "https://discoveryengine.googleapis.com/v1alpha/"
+    "projects/555896765364/locations/global/collections/default_collection/"
+    "engines/nico-web-ai:search"
 )
 
 # ============================================================
@@ -103,6 +112,8 @@ def ensure_session_defaults():
     st.session_state.setdefault("max_tokens", 256)
     st.session_state.setdefault("current_video", None)
     st.session_state.setdefault("open_cfg", False)
+    # Guardaremos las credenciales OAuth aquí
+    st.session_state.setdefault("creds", None)
 
 
 def header_html():
@@ -216,6 +227,9 @@ def exchange_code_for_token():
         flow.fetch_token(code=code)
         creds = flow.credentials
 
+        # Guardamos las credenciales completas en session_state
+        st.session_state["creds"] = creds
+
         request = grequests.Request()
         idinfo = id_token.verify_oauth2_token(creds.id_token, request, CLIENT_ID)
 
@@ -231,6 +245,25 @@ def exchange_code_for_token():
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
+
+
+def get_valid_access_token():
+    """
+    Devuelve un access token válido a partir de las credenciales OAuth
+    almacenadas en session_state. Si está expirado, intenta refrescarlo.
+    """
+    creds = st.session_state.get("creds")
+    if not creds:
+        return None
+
+    try:
+        if creds.expired and creds.refresh_token:
+            creds.refresh(grequests.Request())
+            st.session_state["creds"] = creds
+        return creds.token
+    except Exception as e:
+        st.warning(f"No se pudo refrescar el token de acceso: {e}")
+        return None
 
 
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
@@ -260,6 +293,68 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
         return text.strip() or "No obtuve respuesta del modelo."
     except Exception as e:
         return f"⚠️ Error con Gemini: {e}"
+
+
+def search_web(query: str, page_size: int = 5):
+    """
+    Llama a Vertex AI Search (engine: nico-web-ai) para buscar en sitios web.
+    Devuelve el JSON de la respuesta o None si falla.
+    """
+    token = get_valid_access_token()
+    if not token:
+        st.warning("No hay token de acceso para usar búsqueda web.")
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    body = {
+        "query": query,
+        "pageSize": page_size,
+        "queryExpansionSpec": {"condition": "AUTO"},
+        "spellCorrectionSpec": {"mode": "AUTO"},
+        "languageCode": "es",
+    }
+
+    try:
+        resp = requests.post(
+            DISCOVERY_SEARCH_URL, headers=headers, json=body, timeout=20
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        st.warning(f"Error al consultar búsqueda web: {e}")
+        return None
+
+
+def format_web_results(raw: dict, max_items: int = 3) -> str:
+    """
+    Formatea los resultados de Vertex AI Search en texto legible para pasarlo a Gemini.
+    Intenta usar campos típicos: title, snippet, link.
+    """
+    if not raw:
+        return ""
+
+    items = []
+    for i, res in enumerate(raw.get("results", [])):
+        if i >= max_items:
+            break
+        doc = res.get("document", {})
+        struct = doc.get("derivedStructData", {}) or {}
+
+        title = struct.get("title") or doc.get("id", f"resultado_{i+1}")
+        snippet = struct.get("snippet") or struct.get("extractive_answers", "")
+        link = struct.get("link") or struct.get("uri") or ""
+
+        chunk = f"Título: {title}\nResumen: {snippet}\nURL: {link}"
+        items.append(chunk)
+
+    if not items:
+        return ""
+
+    return "\n\n".join(items)
 
 
 def speak_browser(text: str):
@@ -403,10 +498,10 @@ with conv_col:
     user_msg = st.text_input("Escribe tu pregunta:")
 
     if st.button("Enviar") and user_msg.strip():
+        pregunta = user_msg.strip()
+
         # Guardar mensaje de usuario
-        st.session_state["history"].append(
-            {"role": "user", "content": user_msg.strip()}
-        )
+        st.session_state["history"].append({"role": "user", "content": pregunta})
 
         # Seleccionar y mostrar video aleatorio en la columna derecha
         try:
@@ -435,12 +530,35 @@ with conv_col:
         except Exception as e:
             st.warning(f"No se pudo reproducir el video: {e}")
 
-        # Llamada a Gemini
+        # ====================================================
+        # 1) Búsqueda web en Vertex AI Search
+        # ====================================================
+        web_json = search_web(pregunta)
+        web_context = format_web_results(web_json)
+
+        # ====================================================
+        # 2) Llamada a Gemini con contexto de web (si existe)
+        # ====================================================
         sys_prompt = (
-            "Eres NICO, asistente institucional de la UMSNH. "
-            "Responde siempre en español, de forma clara, breve y amable."
+            "Eres NICO, asistente institucional de la Universidad Michoacana de San "
+            "Nicolás de Hidalgo (UMSNH). Respondes SIEMPRE en español, de forma clara, "
+            "breve, amable y basada en información confiable. "
+            "Si tienes resultados de búsqueda web, debes usarlos como fuente principal "
+            "y citar las URLs relevantes cuando sea útil."
         )
-        full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
+
+        if web_context:
+            full_prompt = (
+                f"{sys_prompt}\n\n"
+                "A continuación tienes resultados de búsqueda recientes de la web "
+                "(principalmente sitios oficiales de la UMSNH y fuentes confiables):\n\n"
+                f"{web_context}\n\n"
+                f"Pregunta del usuario: {pregunta}\n\n"
+                "Usa SOLO esta información como base, evitando inventar datos. "
+                "Si algo no aparece aquí, dilo explícitamente."
+            )
+        else:
+            full_prompt = f"{sys_prompt}\n\nPregunta del usuario: {pregunta}"
 
         reply = gemini_generate(
             full_prompt,
@@ -450,9 +568,7 @@ with conv_col:
         )
 
         # Guardar respuesta del asistente
-        st.session_state["history"].append(
-            {"role": "assistant", "content": reply}
-        )
+        st.session_state["history"].append({"role": "assistant", "content": reply})
 
         # Pausar el video (pero sin quitarlo)
         pause_js = """
@@ -484,9 +600,8 @@ with conv_col:
             pause_js = """
             <script>
             const v = parent.document.querySelector('video');
-            if (v) {{ v.pause(); }}
+            if (v) { v.pause(); }
             </script>
             """
             components.html(pause_js, height=0)
             break
-
