@@ -481,11 +481,13 @@ with conv_col:
             "Responde siempre en español, ingles o purepecha de forma clara, breve y amable.\n\n"
             "Cuando lo necesites, usa la búsqueda web que ya está habilitada para consultar información actualizada.\n"
             "PRIORIZA siempre los sitios oficiales de la UMSNH, por ejemplo:\n"
-            
-            "- https://www.umich.mx\n"
+            si te piden el nombre de algunfucionario ve a la pagina https://umich.mx/unidades-administrativas/            "- https://www.umich.mx\n"
             "- https://www.dce.umich.mx\n"
+            si te preguntan por tramites de alunos o adminstrativos los alumnos puedes acer sus tramites cunsulta 
             "- https://siia.umich.mx\n"
+            o en el https://www.tesoreria.umich.mx/vest/
             "- y otros subdominios *.umich.mx\n\n"
+            
             "Si la respuesta se basa en información encontrada en la web, menciónalo brevemente al final."
         )
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
