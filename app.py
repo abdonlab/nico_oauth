@@ -487,19 +487,19 @@ with conv_col:
             "Si la respuesta se basa en información encontrada en la web, menciónalo brevemente al final."
             para respuestas mas precisas
             consulta estas páginas oficiales y sus subpáginas:
-	•	https://www.dce.umich.mx/
-	•	https://www.umich.mx/
-	•	https://www.dce.umich.mx/guias/guia-inscripciones-en-linea/
-	•	https://www.dce.umich.mx/guias/guia-para-generar-orden-de-pago-de-certificados-cartas-de-pasante-y-certificacion-de-firmas/
-	•	https://siia.umich.mx/escolar/convocatoria_23-24/convocatoria-bachillerato.html
-	•	https://www.bachillerato.umich.mx/index.php/planteles
+		https://www.dce.umich.mx/
+		https://www.umich.mx/
+		https://www.dce.umich.mx/guias/guia-inscripciones-en-linea/
+		https://www.dce.umich.mx/guias/guia-para-generar-orden-de-pago-de-certificados-cartas-de-pasante-y-certificacion-de-firmas/
+		https://siia.umich.mx/escolar/convocatoria_23-24/convocatoria-bachillerato.html
+		https://www.bachillerato.umich.mx/index.php/planteles
 Preparatorias:
-	•	https://www.colegio.umich.mx/
-	•	https://www.umich.mx/oferta-med.html
+		https://www.colegio.umich.mx/
+		https://www.umich.mx/oferta-med.html
 Licenciaturas:
-	•	https://www.umich.mx/oferta-sup.html
+		https://www.umich.mx/oferta-sup.html
 Posgrados:
-	•	https://www.umich.mx/oferta-posgrado.html
+		https://www.umich.mx/oferta-posgrado.html
         )
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
 
