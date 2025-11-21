@@ -315,7 +315,7 @@ def speak_browser(text: str):
             let chosen = null;
 
             // Preferir voces masculinas/neutras en español
-            const preferNames = ["miguel", "diego", "jorge", "pablo", "rocko", male", "hombre"];
+            const preferNames = ["rocko", "miguel", "diego", "jorge", "pablo", "male", "hombre"];
             for (const v of voices) {{
                 const name = (v.name || "").toLowerCase();
                 const lang = (v.lang || "").toLowerCase();
@@ -476,15 +476,13 @@ with conv_col:
 
         # Llamada a Gemini (ahora con web search habilitado)
         sys_prompt = (
-            "IMPORTANT: No uses Markdown ni símbolos de formato. No uses negritas, no uses asteriscos, no uses guiones, no uses listas, no uses encabezados. Responde únicamente en texto plano sin ningún tipo de formato.\n\n"
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
-            "La actual rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Asumió el cargo el 7 de enero de 2023 y su periodo concluirá en 2027."            "Responde siempre en español o ingles o purepecha cuando te lo pidan de forma clara, breve y amable.\n\n"
+            "Responde siempre en español, de forma clara, breve y amable.\n\n"
             "Cuando lo necesites, usa la búsqueda web que ya está habilitada para consultar información actualizada.\n"
             "PRIORIZA siempre los sitios oficiales de la UMSNH, por ejemplo:\n"
             "- https://www.umich.mx\n"
             "-https://www.gacetanicolaita.umich.mx/n"
-            "-https://umich.mx/unidades-administrativas/n"
-            "- https://www.dce.umich.mx\n"
+             "-https://umich.mx/unidades-administrativas/n"            "-https://umich.mx/unidades-administrativas/n"            "- https://www.dce.umich.mx\n"
             "- https://siia.umich.mx\n"
             "- y otros subdominios *.umich.mx\n\n"
             "Si la respuesta se basa en información encontrada en la web, menciónalo brevemente al final."
@@ -502,9 +500,9 @@ with conv_col:
         if not st.session_state["greeted"]:
             name = st.session_state["profile"].get("name", "")
             if name:
-                saludo = f"Hola {name}, soy NICO, tu asistente virtual de la Universidad Michoacana.\n\n"
+                saludo = f"Hola {name}, soy NICO, tu asistente virtual de la UMSNH.\n\n"
             else:
-                saludo = "Hola, soy NICO.\n\n"
+                saludo = "Hola, soy NICO, tu asistente virtual de la UMSNH.\n\n"
             reply = saludo + (reply or "")
             st.session_state["greeted"] = True
 
