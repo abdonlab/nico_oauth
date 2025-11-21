@@ -482,6 +482,8 @@ with conv_col:
             "Cuando lo necesites, usa la búsqueda web que ya está habilitada para consultar información actualizada.\n"
             "PRIORIZA siempre los sitios oficiales de la UMSNH, por ejemplo:\n"
             "- https://www.umich.mx\n"
+            "-https://www.gacetanicolaita.umich.mx/n"
+            "-https://umich.mx/unidades-administrativas/n"
             "- https://www.dce.umich.mx\n"
             "- https://siia.umich.mx\n"
             "- y otros subdominios *.umich.mx\n\n"
