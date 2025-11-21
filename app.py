@@ -315,7 +315,7 @@ def speak_browser(text: str):
             let chosen = null;
 
             // Preferir voces masculinas/neutras en español
-            const preferNames = ["rocko", "miguel", "diego", "jorge", "pablo", "male", "hombre"];
+            const preferNames = ["miguel", "diego", "jorge", "pablo", "rocko", male", "hombre"];
             for (const v of voices) {{
                 const name = (v.name || "").toLowerCase();
                 const lang = (v.lang || "").toLowerCase();
