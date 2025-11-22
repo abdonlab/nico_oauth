@@ -1,6 +1,6 @@
 # ============================================================
-# NICO OAuth + Gemini 2.0 Flash-Lite + Voz en Navegador
-# (CORREGIDO: st.rerun y st.query_params para Streamlit nuevo)
+# NICO: Asistente Virtual UMSNH
+# (Sin negritas + UI Zorro + Botón Azul + Correcciones)
 # ============================================================
 
 import os
@@ -30,16 +30,16 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# FIX redirección /oauth2callback (Actualizado para st.query_params)
+# FIX redirección /oauth2callback (Versiones nuevas)
 # ------------------------------------------------------------
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
     parsed = urllib.parse.urlparse(_request_uri)
     query = urllib.parse.parse_qs(parsed.query)
-    # Convertir valores de lista a string para el nuevo query_params
+    # Limpiar y convertir para st.query_params
     query_clean = {k: v[0] for k, v in query.items()}
     st.query_params.update(query_clean)
-    st.rerun() # <--- CORREGIDO
+    st.rerun()
 
 # ------------------------------------------------------------
 # Cargar variables de entorno
@@ -105,14 +105,17 @@ def ensure_session_defaults():
     st.session_state.setdefault("current_video", None)
     st.session_state.setdefault("open_cfg", False)
     st.session_state.setdefault("greeted", False)
-    # Nuevos para el control de input
     st.session_state.setdefault("input_val", "")
     st.session_state.setdefault("trigger_run", False)
 
 
 def header_html():
-    """Cabecera con avatar de video circular."""
+    """Cabecera con avatar de video circular e icono de Zorro 🦊."""
     video_path = "assets/videos/nico_header_video.mp4"
+    
+    # Icono del zorro por defecto
+    video_tag = '<div class="nico-placeholder">🦊</div>'
+
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("utf-8")
@@ -121,8 +124,6 @@ def header_html():
             <source src="data:video/mp4;base64,{b64}" type="video/mp4">
         </video>
         """
-    else:
-        video_tag = '<div class="nico-placeholder"></div>'
 
     return f"""
     <style>
@@ -131,18 +132,25 @@ def header_html():
         color:#fff;
         padding:16px 20px;
         border-radius:8px;
+        margin-bottom: 20px;
     }}
     .nico-wrap {{
         display:flex;
         align-items:center;
         gap:16px;
     }}
-    .nico-video,.nico-placeholder {{
-        width:56px;
-        height:56px;
+    .nico-video, .nico-placeholder {{
+        width:60px;
+        height:60px;
         border-radius:50%;
         background:#fff;
         object-fit:cover;
+        /* Centrar el emoji */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px; 
+        border: 2px solid #e0e0e0;
     }}
     .nico-title {{
         font-size:26px;
@@ -175,7 +183,7 @@ def header_html():
 
 
 def login_view():
-    """Pantalla de login con botón de Google."""
+    """Pantalla de login con BOTÓN RELLENO de Google."""
     st.markdown(header_html(), unsafe_allow_html=True)
     st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
 
@@ -196,16 +204,31 @@ def login_view():
         state=state_key,
     )
 
-    # st.query_params para versiones nuevas
     st.query_params["oauth_state"] = state_key
-    st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
+    
+    # --- BOTÓN ESTILIZADO ---
+    st.markdown(f"""
+    <a href="{auth_url}" target="_self" style="
+        display: inline-block;
+        background-color: #4285F4; /* Azul Google */
+        color: white;
+        padding: 12px 24px;
+        text-decoration: none;
+        border-radius: 6px;
+        font-family: sans-serif;
+        font-weight: bold;
+        font-size: 16px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        margin-top: 10px;
+    ">
+        🔐 Iniciar sesión con Google
+    </a>
+    """, unsafe_allow_html=True)
 
 
 def exchange_code_for_token():
-    """Intercambiar el código OAuth por tokens y obtener perfil."""
-    # CAMBIO IMPORTANTE: Usar st.query_params en lugar de experimental
+    """Intercambiar el código OAuth por tokens."""
     try:
-        # En nuevas versiones es un objeto tipo dict, no devuelve listas por defecto
         params = st.query_params
         code = params.get("code")
         state = params.get("state")
@@ -237,8 +260,8 @@ def exchange_code_for_token():
             "picture": idinfo.get("picture"),
         }
 
-        st.query_params.clear() # Limpiar URL
-        st.rerun() # <--- CORREGIDO
+        st.query_params.clear()
+        st.rerun()
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
@@ -387,7 +410,7 @@ with conv_col:
     with c1:
         if st.button("🎙️ Voz: " + ("ON" if st.session_state["voice_on"] else "OFF")):
             st.session_state["voice_on"] = not st.session_state["voice_on"]
-            st.rerun() # <--- CORREGIDO
+            st.rerun()
     with c2:
         if st.button("⚙️ Config"):
             st.session_state["open_cfg"] = True
@@ -401,44 +424,39 @@ with conv_col:
             st.slider("Máx. tokens", 64, 2048, key="max_tokens", step=32)
             if st.button("Cerrar Config"):
                 st.session_state["open_cfg"] = False
-                st.rerun() # <--- CORREGIDO
+                st.rerun()
 
     st.markdown("### 💬 Conversación")
 
-    # --- NUEVA LÓGICA DE INPUT (Callbacks para Enter y Borrar) ---
+    # --- LÓGICA DE INPUT (Callbacks para Enter y Borrar) ---
     
     def action_submit():
-        """Activa la bandera para enviar a Gemini"""
         if st.session_state["input_val"].strip():
             st.session_state["trigger_run"] = True
 
     def action_clear():
-        """Limpia el texto sin enviar"""
         st.session_state["input_val"] = ""
         st.session_state["trigger_run"] = False
 
-    # Input con on_change (detecta Enter)
     st.text_input(
         "Escribe tu pregunta:", 
         key="input_val", 
         on_change=action_submit
     )
 
-    # Botones lado a lado
     btn_c1, btn_c2, _ = st.columns([0.15, 0.15, 0.7])
     with btn_c1:
         st.button("Enviar 🚀", on_click=action_submit)
     with btn_c2:
         st.button("Borrar 🗑️", on_click=action_clear)
 
-    # Procesamiento si se activó la bandera
+    # Procesamiento
     if st.session_state["trigger_run"]:
         user_msg = st.session_state["input_val"]
         
-        # 1. Guardar mensaje de usuario
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
-        # 2. Video Aleatorio
+        # Video Aleatorio
         try:
             video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
             if video_files:
@@ -457,16 +475,17 @@ with conv_col:
         except Exception as e:
             st.warning(f"Video error: {e}")
 
-        # 3. Obtener Nombre (Primer nombre)
+        # Obtener Nombre
         full_name = st.session_state['profile'].get('name', 'Usuario')
         first_name = full_name.split(' ')[0] if full_name else 'Amigo'
 
-        # 4. Prompt con Nombre Natural
+        # Prompt con Nombre Natural y SIN NEGRITAS
         sys_prompt = (
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
             f"El usuario se llama {first_name}. "
             "Responde siempre en español, de forma clara, breve y amable. "
-            "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n\n"
+            "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n"
+            "IMPORTANTE: No uses negritas (**texto**) ni formato markdown pesado en tus respuestas. Escribe solo texto plano.\n\n"
             "Usa la búsqueda web para información actualizada. Prioriza sitios *.umich.mx."
         )
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
@@ -478,17 +497,15 @@ with conv_col:
             st.session_state["max_tokens"],
         )
 
-        # 5. Saludo Único (Solo la primera vez)
+        # Saludo Único
         if not st.session_state["greeted"]:
             saludo = f"¡Hola {first_name}! Soy NICO, tu asistente virtual.\n\n"
             reply = saludo + reply
             st.session_state["greeted"] = True
 
         st.session_state["history"].append({"role": "assistant", "content": reply})
-        
-        # Bajamos la bandera pero NO borramos el input
         st.session_state["trigger_run"] = False
-        st.rerun() # <--- CORREGIDO
+        st.rerun()
 
     # Mostrar historial
     for msg in reversed(st.session_state["history"][-20:]):
