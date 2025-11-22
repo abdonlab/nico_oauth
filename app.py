@@ -138,9 +138,7 @@ def header_html():
         height:56px;
         border-radius:50%;
         object-fit:cover;
-        background:#fff0;
-}}
-    .nico-title {{
+        background:#fff0; }}.nico-title {{
         font-size:26px;
         font-weight:800;
         margin:0;
