@@ -1,8 +1,3 @@
-# ============================================================
-# NICO OAuth + Gemini 2.0 Flash-Lite + Voz en Navegador
-# (CORREGIDO: Sincronización de video y Saludo único)
-# ============================================================
-
 import os
 import urllib.parse
 import json
@@ -449,19 +444,22 @@ with conv_col:
         first_name = full_name.split(' ')[0] if full_name else 'Amigo'
 
         # 4. Prompt con Nombre Natural y restricción de saludos extras
+        # CAMBIO IMPORTANTE: SE HA AÑADIDO UNA INSTRUCCIÓN PARA QUE NO SALUDE
         sys_prompt = (
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
             f"El usuario se llama {first_name}. "
-            "La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."             "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc. "
-            "NO generes listas con guiones. "        
+            "La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."
+            "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc. "
+            "NO generes listas con guiones. "
             "Responde siempre en español o Ingles o purepechade segun te lo soliciten de forma clara, breve y amable. "
-            "No saludes al inicio de cada respuesta (ej. no digas 'Hola', 'Buenos días'), ve directo al grano con la respuesta. "
+            # NUEVA INSTRUCCIÓN EXPLÍCITA PARA EVITAR DOBLES SALUDOS:
+            "**IMPORTANTE: NO saludes al inicio de tu respuesta (ej. no digas 'Hola', 'Buenos días', 'Qué tal {nombre}'). El sistema ya saluda por ti la primera vez. Comienza directamente con la información solicitada o la respuesta a la pregunta.**"
             "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n"
             "IMPORTANTE: No uses negritas (*texto*) ni formato markdown pesado en tus respuestas. Escribe solo texto plano.\n\n"
             "Usa la búsqueda web para información actualizada. Prioriza sitios *.umich.mx."
-            "- https://www.umich.mx\n" 
+            "- https://www.umich.mx\n"
             "para ultimas noticias busca en https://www.gacetanicolaita.umich.mx/"
-            "para nombres de funcionarios busca en https://umich.mx/unidades-administrativas/"    
+            "para nombres de funcionarios busca en https://umich.mx/unidades-administrativas/"
             "-https://www.gacetanicolaita.umich.mx/n"
             "-https://umich.mx/unidades-administrativas/n"
             "- https://www.dce.umich.mx\n"
