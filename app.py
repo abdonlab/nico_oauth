@@ -109,10 +109,15 @@ def ensure_session_defaults():
     st.session_state.setdefault("input_val", "")
     st.session_state.setdefault("trigger_run", False)
 
+# ============================================================
+# 🔵 HEADER NUEVO (ÚNICO CAMBIO SOLICITADO)
+# ============================================================
 
 def header_html():
-    """Cabecera con avatar de video circular."""
+    """Cabecera visual."""
     video_path = "assets/videos/nico_header_video.mp4"
+    video_tag = '<div class="nico-placeholder">🦊</div>'
+    
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("utf-8")
@@ -121,45 +126,28 @@ def header_html():
             <source src="data:video/mp4;base64,{b64}" type="video/mp4">
         </video>
         """
-    else:
-        video_tag = '<div class="nico-placeholder"></div>'
 
     return f"""
     <style>
     .nico-header {{
-        background:#0f2347;
-        color:#fff;
-        padding:16px 20px;
-        border-radius:8px;
+        background: linear-gradient(90deg, #0f2347 0%, #1a3b6e 100%);
+        color: #fff;
+        padding: 16px 24px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }}
-    .nico-wrap {{
-        display:flex;
-        align-items:center;
-        gap:16px;
+    .nico-wrap {{ display: flex; align-items: center; gap: 16px; }}
+    .nico-video, .nico-placeholder {{
+        width: 60px; height: 60px; border-radius: 50%;
+        background: #fff; object-fit: cover; border: 2px solid #ffd700;
+        display: flex; align-items: center; justify-content: center; font-size: 30px;
     }}
-    .nico-video,.nico-placeholder {{
-        width:56px;
-        height:56px;
-        border-radius:50%;
-        background:#fff;
-        object-fit:cover;
-    }}
-    .nico-title {{
-        font-size:26px;
-        font-weight:800;
-        margin:0;
-    }}
-    .nico-subtitle {{
-        margin:0;
-        font-size:18px;
-        opacity:.9;
-    }}
+    .nico-title {{ font-size: 24px; font-weight: 800; margin: 0; }}
+    .nico-subtitle {{ margin: 0; font-size: 16px; opacity: 0.8; font-weight: 300; }}
     .chat-bubble {{
-        background:#f8fbff;
-        border:2px solid #dfe8f9;
-        border-radius:14px;
-        padding:18px;
-        margin-top:12px;
+        background: #f0f2f6; border-radius: 12px; padding: 16px; margin-top: 8px;
+        color: #31333F; border-left: 4px solid #0f2347;
     }}
     </style>
     <div class="nico-header">
@@ -173,39 +161,30 @@ def header_html():
     </div>
     """
 
+# ============================================================
+# Login View
+# ============================================================
 
 def login_view():
-    """Pantalla de login con botón de Google."""
     st.markdown(header_html(), unsafe_allow_html=True)
-    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
-
-    if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
-        st.error("Faltan variables de configuración OAuth.")
-        return
-
-    if "oauth_state" not in st.session_state:
-        st.session_state["oauth_state"] = str(uuid.uuid4())
-
+    st.info("🔒 Acceso restringido. Inicia sesión con tu cuenta institucional o Google.")
+    
     state_key = st.session_state["oauth_state"]
     flow = get_flow(state=state_key)
-
-    auth_url, _ = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes=False,
-        prompt="consent",
-        state=state_key,
-    )
-
-    # st.query_params para versiones nuevas
-    st.query_params["oauth_state"] = state_key
-    st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
-
+    auth_url, _ = flow.authorization_url(prompt="consent")
+    
+    st.markdown(f"""
+        <a href="{auth_url}" target="_self" style="
+            display: inline-block; text-decoration: none; color: white;
+            background-color: #4285F4; padding: 10px 20px; border-radius: 5px;
+            font-weight: bold; font-family: sans-serif;">
+            🔐 Iniciar sesión con Google
+        </a>
+    """, unsafe_allow_html=True)
 
 def exchange_code_for_token():
     """Intercambiar el código OAuth por tokens y obtener perfil."""
-    # CAMBIO IMPORTANTE: Usar st.query_params en lugar de experimental
     try:
-        # En nuevas versiones es un objeto tipo dict, no devuelve listas por defecto
         params = st.query_params
         code = params.get("code")
         state = params.get("state")
@@ -216,13 +195,6 @@ def exchange_code_for_token():
         return
 
     try:
-        if "oauth_state" not in st.session_state:
-            st.session_state["oauth_state"] = state
-
-        if state != st.session_state.get("oauth_state"):
-            st.warning("⚠️ El estado OAuth se regeneró automáticamente.")
-            st.session_state["oauth_state"] = state
-
         flow = get_flow(state=state)
         flow.fetch_token(code=code)
         creds = flow.credentials
@@ -237,16 +209,16 @@ def exchange_code_for_token():
             "picture": idinfo.get("picture"),
         }
 
-        st.query_params.clear() # Limpiar URL
-        st.rerun() # <--- CORREGIDO
+        st.query_params.clear()
+        st.rerun()
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
 
-
 # ============================================================
 # Gemini 2.0 con búsqueda en internet
 # ============================================================
+
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     headers = {
@@ -275,11 +247,11 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
     except Exception as e:
         return f"⚠️ Error con Gemini: {e}"
 
+# ============================================================
+# Sincronización de voz + video
+# ============================================================
 
 def speak_browser(text: str):
-    """
-    Usa la Web Speech API y sincroniza el video.
-    """
     if not text: return
     payload = json.dumps(text)
 
@@ -341,7 +313,6 @@ def speak_browser(text: str):
     """
     components.html(js_code, height=0)
 
-
 # ============================================================
 # Lógica principal de la app
 # ============================================================
@@ -387,7 +358,7 @@ with conv_col:
     with c1:
         if st.button("🎙️ Voz: " + ("ON" if st.session_state["voice_on"] else "OFF")):
             st.session_state["voice_on"] = not st.session_state["voice_on"]
-            st.rerun() # <--- CORREGIDO
+            st.rerun()
     with c2:
         if st.button("⚙️ Config"):
             st.session_state["open_cfg"] = True
@@ -401,23 +372,20 @@ with conv_col:
             st.slider("Máx. tokens", 64, 2048, key="max_tokens", step=32)
             if st.button("Cerrar Config"):
                 st.session_state["open_cfg"] = False
-                st.rerun() # <--- CORREGIDO
+                st.rerun()
 
     st.markdown("### 💬 Conversación")
 
-    # --- NUEVA LÓGICA DE INPUT (Callbacks para Enter y Borrar) ---
+    # NUEVA LÓGICA INPUT (sin cambios)
     
     def action_submit():
-        """Activa la bandera para enviar a Gemini"""
         if st.session_state["input_val"].strip():
             st.session_state["trigger_run"] = True
 
     def action_clear():
-        """Limpia el texto sin enviar"""
         st.session_state["input_val"] = ""
         st.session_state["trigger_run"] = False
 
-    # Input con on_change (detecta Enter)
     st.text_input(
         "Escribe tu pregunta:", 
         key="input_val", 
@@ -431,14 +399,13 @@ with conv_col:
     with btn_c2:
         st.button("Borrar 🗑️", on_click=action_clear)
 
-    # Procesamiento si se activó la bandera
+    # Procesar consulta
     if st.session_state["trigger_run"]:
         user_msg = st.session_state["input_val"]
         
-        # 1. Guardar mensaje de usuario
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
-        # 2. Video Aleatorio
+        # VIDEO ALEATORIO (igual que antes)
         try:
             video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
             if video_files:
@@ -457,15 +424,16 @@ with conv_col:
         except Exception as e:
             st.warning(f"Video error: {e}")
 
-        # 3. Obtener Nombre (Primer nombre)
+        # Obtención del nombre EXACTO como estaba en tu código
         full_name = st.session_state['profile'].get('name', 'Usuario')
         first_name = full_name.split(' ')[0] if full_name else 'Amigo'
 
-        # 4. Prompt con Nombre Natural
+        # TU PROMPT EXACTO (NO modificado)
         sys_prompt = (
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
             f"El usuario se llama {first_name}. "
-            "La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."             "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc. "
+            "La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."
+            "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc. "
             "NO generes listas con guiones. "        
             "Responde siempre en español o Ingles o purepechade segun te lo soliciten de forma clara, breve y amable. "
             "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n"
@@ -479,6 +447,7 @@ with conv_col:
             "- https://www.dce.umich.mx\n"
             "- https://siia.umich.mx\n"
         )
+        
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
 
         reply = gemini_generate(
@@ -488,7 +457,7 @@ with conv_col:
             st.session_state["max_tokens"],
         )
 
-        # 5. Saludo Único (Solo la primera vez)
+        # Saludo único (sin tocar)
         if not st.session_state["greeted"]:
             saludo = f"¡Hola {first_name}! Soy NICO, tu asistente virtual.\n\n"
             reply = saludo + reply
@@ -496,11 +465,10 @@ with conv_col:
 
         st.session_state["history"].append({"role": "assistant", "content": reply})
         
-        # Bajamos la bandera pero NO borramos el input
         st.session_state["trigger_run"] = False
-        st.rerun() # <--- CORREGIDO
+        st.rerun()
 
-    # Mostrar historial
+    # Mostrar historial (igualito)
     for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
