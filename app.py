@@ -36,9 +36,10 @@ _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
     parsed = urllib.parse.urlparse(_request_uri)
     query = urllib.parse.parse_qs(parsed.query)
+    # Convertir valores de lista a string para el nuevo query_params
     query_clean = {k: v[0] for k, v in query.items()}
     st.query_params.update(query_clean)
-    st.rerun()
+    st.rerun() # <--- CORREGIDO
 
 # ------------------------------------------------------------
 # Cargar variables de entorno
@@ -93,6 +94,7 @@ def get_flow(state=None):
 
 
 def ensure_session_defaults():
+    """Valores por defecto en session_state."""
     st.session_state.setdefault("logged", False)
     st.session_state.setdefault("profile", {})
     st.session_state.setdefault("history", [])
@@ -108,6 +110,7 @@ def ensure_session_defaults():
 
 
 def header_html():
+    """Cabecera visual."""
     video_path = "assets/videos/nico_header_video.mp4"
     video_tag = '<div class="nico-placeholder">🦊</div>'
     
@@ -157,7 +160,7 @@ def header_html():
 
 def login_view():
     st.markdown(header_html(), unsafe_allow_html=True)
-    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
+    st.info("Inicia sesión con tu cuenta de Google para usar NICO.")
 
     if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
         st.error("Faltan variables de configuración OAuth.")
@@ -225,7 +228,10 @@ def exchange_code_for_token():
 # ============================================================
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    headers = {"Content-Type": "application/json","x-goog-api-key": GEMINI_API_KEY}
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+    }
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -250,7 +256,9 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
 
 
 def speak_browser(text: str):
-    if not text: return
+    if not text:
+        return
+
     payload = json.dumps(text)
 
     js_code = f"""
@@ -261,7 +269,8 @@ def speak_browser(text: str):
         if (!synth) return;
 
         function findVideo() {{
-            return parent.document.querySelector('video');
+            const v = parent.document.querySelector('video');
+            return v;
         }}
 
         function speak() {{
@@ -270,7 +279,7 @@ def speak_browser(text: str):
             const voices = synth.getVoices() || [];
             let chosen = null;
             
-            const preferNames = ["rocko","miguel","diego","jorge","pablo","male","hombre"];
+            const preferNames = ["rocko", "miguel", "diego", "jorge", "pablo", "male", "hombre"];
             for (const v of voices) {{
                 const name = (v.name || "").toLowerCase();
                 const lang = (v.lang || "").toLowerCase();
@@ -286,7 +295,6 @@ def speak_browser(text: str):
                     if (v.lang.toLowerCase().startsWith("es")) {{ chosen = v; break; }}
                 }}
             }}
-
             if (chosen) utter.voice = chosen;
 
             utter.rate = 0.95;
@@ -309,7 +317,9 @@ def speak_browser(text: str):
     }})();
     </script>
     """
+
     components.html(js_code, height=0)
+
 
 # ============================================================
 # Lógica principal de la app
@@ -322,8 +332,10 @@ if not st.session_state.get("logged"):
     login_view()
     st.stop()
 
+# Cabecera
 st.markdown(header_html(), unsafe_allow_html=True)
 
+# Layout: chat + video
 conv_col, video_col = st.columns([0.7, 0.3])
 
 with video_col:
@@ -331,7 +343,10 @@ with video_col:
     
     if not st.session_state["current_video"]:
         try:
-            video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
+            video_files = [
+                f for f in os.listdir("assets/videos") 
+                if f.lower().endswith((".mp4", ".webm"))
+            ]
             if video_files:
                 chosen = random.choice(video_files)
                 video_path = os.path.join("assets/videos", chosen)
@@ -342,13 +357,13 @@ with video_col:
                     <source src="data:video/mp4;base64,{b64}" type="video/mp4">
                 </video>
                 """
-        except: pass
+        except:
+            pass
             
     if st.session_state["current_video"]:
         video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
 
 with conv_col:
-
     c1, c2, c3 = st.columns([0.15, 0.15, 0.7])
     with c1:
         if st.button("🎙️ Voz: " + ("ON" if st.session_state["voice_on"] else "OFF")):
@@ -379,7 +394,11 @@ with conv_col:
         st.session_state["input_val"] = ""
         st.session_state["trigger_run"] = False
 
-    st.text_input("Escribe tu pregunta:", key="input_val", on_change=action_submit)
+    st.text_input(
+        "Escribe tu pregunta:", 
+        key="input_val", 
+        on_change=action_submit
+    )
 
     btn_c1, btn_c2, _ = st.columns([0.15, 0.15, 0.7])
     with btn_c1:
@@ -389,11 +408,14 @@ with conv_col:
 
     if st.session_state["trigger_run"]:
         user_msg = st.session_state["input_val"]
-        
+
         st.session_state["history"].append({"role": "user", "content": user_msg})
 
         try:
-            video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
+            video_files = [
+                f for f in os.listdir("assets/videos") 
+                if f.lower().endswith((".mp4", ".webm"))
+            ]
             if video_files:
                 chosen = random.choice(video_files)
                 video_path = os.path.join("assets/videos", chosen)
@@ -417,13 +439,16 @@ with conv_col:
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
             f"El usuario se llama {first_name}. "
             "La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. "
+            "Fue designada para este cargo por el periodo 2023-2027."
             "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc. "
             "NO generes listas con guiones. "        
-            "Responde siempre en español o Inglés de forma clara, breve y amable. "
-            "Usa su nombre ocasionalmente.\n"
-            "IMPORTANTE: Escribe solo texto plano.\n\n"
-            "Usa la búsqueda web para información actualizada. Prioriza sitios *.umich.mx."
+            "Responde siempre en español o Ingles o purepechade segun te lo soliciten de forma clara, breve y amable. "
+            "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n"
+            "IMPORTANTE: No uses negritas ni formato markdown pesado. "
+            "Usa la búsqueda web para información actualizada. "
+            "Prioriza sitios *.umich.mx."
         )
+
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
 
         reply = gemini_generate(
@@ -433,11 +458,9 @@ with conv_col:
             st.session_state["max_tokens"],
         )
 
-        # ============================================================
-        # ✔️ CORRECCIÓN: SALUDO ÚNICO (YA NO SE REPITE)
-        # ============================================================
-        if not st.session_state.get("greeted", False):
-            reply = f"Hola {first_name}. ¿En qué puedo ayudarte hoy?\n\n" + reply
+        if not st.session_state["greeted"]:
+            saludo = f"Hola {first_name}, soy NICO.\n\n"
+            reply = saludo + reply
             st.session_state["greeted"] = True
 
         st.session_state["history"].append({"role": "assistant", "content": reply})
@@ -446,7 +469,7 @@ with conv_col:
         st.rerun()
 
     # ============================================================
-    # Mostrar historial (corregido para que NO hable si no es respuesta real)
+    # 🔥 BLOQUE FINAL CON LA CORRECCIÓN DE VOZ
     # ============================================================
     for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
@@ -454,10 +477,12 @@ with conv_col:
         else:
             with st.chat_message("assistant"):
                 st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-                
-                # ============================================================
-                # ✔️ CORRECCIÓN: NICO SOLO HABLA EN RESPUESTAS REALES
-                # ============================================================
-                if st.session_state["voice_on"] and msg["role"] == "assistant":
+
+                # --- ⭐ CORRECCIÓN QUE PEDISTE ⭐ ---
+                if (
+                    st.session_state["voice_on"]
+                    and msg["role"] == "assistant"
+                    and st.session_state.get("greeted", False)
+                ):
                     speak_browser(msg["content"])
             break
