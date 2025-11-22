@@ -70,7 +70,6 @@ GEMINI_MODEL = st.secrets.get(
 
 
 def get_flow(state=None):
-    """Crear flujo OAuth con la config embebida (sin archivo JSON)."""
     client_config = {
         "web": {
             "client_id": CLIENT_ID,
@@ -88,13 +87,10 @@ def get_flow(state=None):
     flow = Flow.from_client_config(
         client_config, scopes=SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
     )
-    if state:
-        flow.redirect_uri = GOOGLE_REDIRECT_URI
     return flow
 
 
 def ensure_session_defaults():
-    """Valores por defecto en session_state."""
     st.session_state.setdefault("logged", False)
     st.session_state.setdefault("profile", {})
     st.session_state.setdefault("history", [])
@@ -104,12 +100,11 @@ def ensure_session_defaults():
     st.session_state.setdefault("max_tokens", 256)
     st.session_state.setdefault("current_video", None)
     st.session_state.setdefault("open_cfg", False)
-    # 👇 Para que solo salude una vez por usuario
     st.session_state.setdefault("greeted", False)
+    st.session_state.setdefault("user_input", "")
 
 
 def header_html():
-    """Cabecera con avatar de video circular."""
     video_path = "assets/videos/nico_header_video.mp4"
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
@@ -135,11 +130,10 @@ def header_html():
         align-items:center;
         gap:16px;
     }}
-    .nico-video,.nico-placeholder {{
+    .nico-video {{
         width:56px;
         height:56px;
         border-radius:50%;
-        background:#fff;
         object-fit:cover;
     }}
     .nico-title {{
@@ -160,6 +154,7 @@ def header_html():
         margin-top:12px;
     }}
     </style>
+
     <div class="nico-header">
         <div class="nico-wrap">
             {video_tag}
@@ -172,244 +167,137 @@ def header_html():
     """
 
 
-def login_view():
-    """Pantalla de login con botón de Google."""
-    st.markdown(header_html(), unsafe_allow_html=True)
-    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
+# ------------------------------------------------------------
+# Gemini con búsqueda web
+# ------------------------------------------------------------
+def gemini_generate(prompt, temperature, top_p, max_tokens):
 
-    if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
-        st.error("Faltan variables de configuración OAuth.")
-        return
-
-    if "oauth_state" not in st.session_state:
-        st.session_state["oauth_state"] = str(uuid.uuid4())
-
-    state_key = st.session_state["oauth_state"]
-    flow = get_flow(state=state_key)
-
-    auth_url, _ = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes=False,
-        prompt="consent",
-        state=state_key,
-    )
-
-    st.experimental_set_query_params(oauth_state=state_key)
-    st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
-
-
-def exchange_code_for_token():
-    """Intercambiar el código OAuth por tokens y obtener perfil del usuario."""
-    params = st.experimental_get_query_params()
-    if "code" not in params or "state" not in params:
-        return
-
-    try:
-        code = params["code"][0]
-        state = params["state"][0]
-
-        if "oauth_state" not in st.session_state:
-            st.session_state["oauth_state"] = state
-
-        if state != st.session_state.get("oauth_state"):
-            st.warning("⚠️ El estado OAuth se regeneró automáticamente.")
-            st.session_state["oauth_state"] = state
-
-        flow = get_flow(state=state)
-        flow.fetch_token(code=code)
-        creds = flow.credentials
-
-        request = grequests.Request()
-        idinfo = id_token.verify_oauth2_token(creds.id_token, request, CLIENT_ID)
-
-        st.session_state["logged"] = True
-        st.session_state["profile"] = {
-            "email": idinfo.get("email"),
-            "name": idinfo.get("name"),
-            "picture": idinfo.get("picture"),
-        }
-
-        st.experimental_set_query_params()
-        st.rerun()
-
-    except Exception as e:
-        st.error(f"Error al autenticar: {e}")
-
-
-# ============================================================
-# Gemini 2.0 con búsqueda en internet (Google Search tool)
-# ============================================================
-def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
-    """
-    Llamada a Gemini 2.0 Flash-Lite usando la API de Generative Language
-    con la herramienta `google_search` habilitada para hacer búsquedas web.
-    """
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": float(temperature),
+            "topP": float(top_p),
+            "maxOutputTokens": int(max_tokens),
+        },
+        "tools": [
+            {"google_search": {}}
+        ],
+    }
 
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY,
     }
 
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {
-                        "text": prompt
-                    }
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": float(temperature),
-            "topP": float(top_p),
-            "maxOutputTokens": int(max_tokens),
-        },
-        # Habilitamos la herramienta de búsqueda en la web
-        "tools": [
-            {
-                "google_search": {}
-            }
-        ],
-    }
-
     try:
-        r = requests.post(endpoint, headers=headers, json=payload, timeout=40)
-        r.raise_for_status()
-        data = r.json()
+        resp = requests.post(endpoint, headers=headers, json=payload, timeout=40)
+        resp.raise_for_status()
+        data = resp.json()
 
         text = ""
-        for cand in data.get("candidates", []):
-            for part in cand.get("content", {}).get("parts", []):
-                text += part.get("text", "")
+        for c in data.get("candidates", []):
+            for p in c.get("content", {}).get("parts", []):
+                text += p.get("text", "")
 
-        return text.strip() or "No obtuve respuesta del modelo."
+        return text.strip()
+
     except Exception as e:
         return f"⚠️ Error con Gemini: {e}"
 
 
-def speak_browser(text: str):
-    """
-    Usa la Web Speech API del navegador para leer el texto
-    con voz más grave/masculina en español si está disponible
-    y sincroniza el video: play al iniciar, pausa al terminar.
-    """
+# ------------------------------------------------------------
+# Voz y sincronización con video
+# ------------------------------------------------------------
+def speak_browser(text):
+
     if not text:
         return
 
-    payload = json.dumps(text)  # escapa comillas, etc.
+    payload = json.dumps(text)
 
-    js_code = f"""
+    js = f"""
     <script>
-    (function() {{
-        const text = {payload};
-        const synth = window.speechSynthesis;
-        if (!synth) return;
+    const utter = new SpeechSynthesisUtterance({payload});
+    utter.rate = 0.95;
+    utter.pitch = 0.65;
 
-        function speak() {{
-            synth.cancel();
-            const utter = new SpeechSynthesisUtterance(text);
+    const vid = parent.document.getElementById("nico-main-video");
 
-            const voices = synth.getVoices() || [];
-            let chosen = null;
+    utter.onstart = () => {{
+        if (vid) vid.play();
+    }};
 
-            // Preferir voces masculinas/neutras en español
-            const preferNames = ["rocko", "miguel", "diego", "jorge", "pablo", "male", "hombre"];
-            for (const v of voices) {{
-                const name = (v.name || "").toLowerCase();
-                const lang = (v.lang || "").toLowerCase();
-                if (lang.startsWith("es")) {{
-                    for (const pref of preferNames) {{
-                        if (name.includes(pref)) {{
-                            chosen = v;
-                            break;
-                        }}
-                    }}
-                }}
-                if (chosen) break;
-            }}
+    utter.onend = () => {{
+        if (vid) vid.pause();
+    }};
 
-            // Si no hay, cualquier voz en español
-            if (!chosen) {{
-                for (const v of voices) {{
-                    const lang = (v.lang || "").toLowerCase();
-                    if (lang.startsWith("es")) {{
-                        chosen = v;
-                        break;
-                    }}
-                }}
-            }}
-
-            if (chosen) {{
-                utter.voice = chosen;
-            }}
-
-            // Voz más grave / neutra
-            utter.rate = 0.95;   // un poco más lenta
-            utter.pitch = 0.65;  // más grave
-
-            // 🔥 Sincronización con el video
-            utter.onstart = () => {{
-                const v = parent.document.querySelector('video');
-                if (v) {{ v.play(); }}
-            }};
-
-            utter.onend = () => {{
-                const v = parent.document.querySelector('video');
-                if (v) {{ v.pause(); }}
-            }};
-
-            synth.speak(utter);
-        }}
-
-        if (synth.getVoices().length === 0) {{
-            synth.addEventListener('voiceschanged', function handler() {{
-                synth.removeEventListener('voiceschanged', handler);
-                speak();
-            }});
-        }} else {{
-            speak();
-        }}
-    }})();
+    speechSynthesis.speak(utter);
     </script>
     """
 
-    components.html(js_code, height=0)
+    components.html(js, height=0)
 
 
 # ============================================================
-# Lógica principal de la app
+# Lógica principal
 # ============================================================
 
 ensure_session_defaults()
-exchange_code_for_token()
 
-if not st.session_state.get("logged"):
+# OAuth
+params = st.experimental_get_query_params()
+
+if "code" in params:
+    try:
+        flow = get_flow()
+        flow.fetch_token(code=params["code"][0])
+        creds = flow.credentials
+
+        req = grequests.Request()
+        idinfo = id_token.verify_oauth2_token(creds.id_token, req, CLIENT_ID)
+
+        st.session_state["logged"] = True
+        st.session_state["profile"] = {
+            "email": idinfo["email"],
+            "name": idinfo["name"],
+            "picture": idinfo["picture"],
+        }
+
+        st.experimental_set_query_params()
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"Error OAuth: {e}")
+
+# ------------------------------------------------------------
+# Login
+# ------------------------------------------------------------
+if not st.session_state["logged"]:
     login_view()
     st.stop()
 
-# Cabecera
+
+# ------------------------------------------------------------
+# Interfaz principal
+# ------------------------------------------------------------
 st.markdown(header_html(), unsafe_allow_html=True)
 
-# Layout: chat + video
 conv_col, video_col = st.columns([0.7, 0.3])
 
 with video_col:
     video_container = st.empty()
     if st.session_state["current_video"]:
-        video_container.markdown(
-            st.session_state["current_video"], unsafe_allow_html=True
-        )
+        video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
 
 with conv_col:
-    # Barra superior de controles
+
+    # Controles
     c1, c2, c3 = st.columns([0.1, 0.1, 0.8])
 
     with c1:
-        if st.button(
-            "🎙️ Voz: ON" if st.session_state["voice_on"] else "🔇 Voz: OFF"
-        ):
+        if st.button("🎙️ Voz ON" if st.session_state["voice_on"] else "🔇 Voz OFF"):
             st.session_state["voice_on"] = not st.session_state["voice_on"]
 
     with c2:
@@ -419,114 +307,110 @@ with conv_col:
     with c3:
         st.write(f"Bienvenido, **{st.session_state['profile'].get('name', '')}**")
 
-    # Popover de configuración del modelo
-    if st.session_state.get("open_cfg"):
+    if st.session_state["open_cfg"]:
         with st.popover("Configuración del Modelo"):
-            st.slider(
-                "Temperatura", 0.0, 1.5, key="temperature", help="Controla la creatividad"
-            )
+            st.slider("Temperatura", 0.0, 1.5, key="temperature")
             st.slider("Top-P", 0.0, 1.0, key="top_p")
-            st.slider(
-                "Máx. tokens",
-                64,
-                2048,
-                key="max_tokens",
-                step=32,
-            )
+            st.slider("Máx. tokens", 64, 2048, key="max_tokens", step=32)
             if st.button("Cerrar"):
                 st.session_state["open_cfg"] = False
 
     st.markdown("### 💬 Conversación")
 
-    # Entrada del usuario
-    user_msg = st.text_input("Escribe tu pregunta:")
+    # ---------------------------
+    # INPUT + ENVIAR + BORRAR
+    # ---------------------------
+    inp_col, send_col, del_col = st.columns([0.7, 0.15, 0.15])
 
-    if st.button("Enviar") and user_msg.strip():
-        # Guardar mensaje de usuario
-        st.session_state["history"].append(
-            {"role": "user", "content": user_msg.strip()}
+    with inp_col:
+        st.session_state["user_input"] = st.text_input(
+            "Escribe tu pregunta:",
+            st.session_state["user_input"]
         )
 
-        # Seleccionar y mostrar video aleatorio en la columna derecha
+    with send_col:
+        send = st.button("Enviar", use_container_width=True)
+
+    with del_col:
+        clear = st.button("Borrar", use_container_width=True)
+
+    # Borrar historial
+    if clear:
+        st.session_state["history"] = []
+        st.session_state["current_video"] = None
+        st.session_state["greeted"] = False
+        st.session_state["user_input"] = ""
+        st.rerun()
+
+    # Enviar mensaje
+    msg = st.session_state["user_input"].strip()
+
+    if send and msg:
+        st.session_state["history"].append({"role": "user", "content": msg})
+
+        # Video aleatorio
         try:
-            video_files = [
-                f
-                for f in os.listdir("assets/videos")
-                if f.lower().endswith((".mp4", ".webm", ".ogg", ".ogv"))
+            vids = [
+                x for x in os.listdir("assets/videos")
+                if x.lower().endswith((".mp4", ".webm", ".ogg"))
             ]
 
-            if video_files:
-                chosen = random.choice(video_files)
-                video_path = os.path.join("assets/videos", chosen)
+            if vids:
+                ch = random.choice(vids)
+                p = os.path.join("assets/videos", ch)
 
-                with open(video_path, "rb") as f:
+                with open(p, "rb") as f:
                     b64 = base64.b64encode(f.read()).decode("utf-8")
 
-                html_video = f"""
-                <video width="220" autoplay loop muted playsinline
+                html_vid = f"""
+                <video id="nico-main-video" width="220" autoplay loop muted playsinline
                        style="border-radius:12px;">
                     <source src="data:video/mp4;base64,{b64}" type="video/mp4">
                 </video>
                 """
 
-                st.session_state["current_video"] = html_video
-                video_container.markdown(html_video, unsafe_allow_html=True)
-        except Exception as e:
-            st.warning(f"No se pudo reproducir el video: {e}")
+                st.session_state["current_video"] = html_vid
+                video_container.markdown(html_vid, unsafe_allow_html=True)
 
-        # Llamada a Gemini (ahora con web search habilitado)
-        sys_prompt = (
-            "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
-            "Responde siempre en español, de forma clara, breve y amable.\n\n"
-            "Cuando lo necesites, usa la búsqueda web que ya está habilitada para consultar información actualizada.\n"
-            "PRIORIZA siempre los sitios oficiales de la UMSNH, por ejemplo:\n"
-            "- https://www.umich.mx\n"
-            "-https://www.gacetanicolaita.umich.mx/n"
-             "-https://umich.mx/unidades-administrativas/n"      
-            "-https://umich.mx/unidades-administrativas/n"        
-            "- https://www.dce.umich.mx\n"
-            "- https://siia.umich.mx\n"
-            "- y otros subdominios *.umich.mx\n\n"
-            "Si la respuesta se basa en información encontrada en la web, menciónalo brevemente al final."
-        )
-        full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
+        except:
+            pass
 
-        reply = gemini_generate(
-            full_prompt,
-            st.session_state["temperature"],
-            st.session_state["top_p"],
-            st.session_state["max_tokens"],
+        # Gemini
+        sys = (
+            "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo."
+            " Usa búsqueda web cuando sea necesario."
         )
 
-        # 👋 Saludo único en la PRIMERA respuesta
+        full = f"{sys}\n\nUsuario: {msg}"
+
+        reply = gemini_generate(full,
+                                st.session_state["temperature"],
+                                st.session_state["top_p"],
+                                st.session_state["max_tokens"])
+
+        # Saludo único
         if not st.session_state["greeted"]:
-            name = st.session_state["profile"].get("name", "")
-            if name:
-                saludo = f"Hola {name}, soy NICO, tu asistente virtual de la Universidad Michoacana de San Nicolas de Hidalgo.\n\n"
-            else:
-                saludo = "¡Hola!.\n\n"
-            reply = saludo + (reply or "")
+            nm = st.session_state["profile"].get("name", "")
+            saludo = f"Hola {nm}, soy NICO, tu asistente virtual.\n\n"
+            reply = saludo + reply
             st.session_state["greeted"] = True
 
-        # Guardar respuesta del asistente
-        st.session_state["history"].append(
-            {"role": "assistant", "content": reply}
-        )
+        # Guardar respuesta
+        st.session_state["history"].append({"role": "assistant", "content": reply})
 
+        # Limpiar input
+        st.session_state["user_input"] = ""
         st.rerun()
 
-    # Mostrar historial (máx. 20 mensajes)
-    for msg in reversed(st.session_state["history"][-20:]):
-        if msg["role"] == "user":
-            st.chat_message("user").markdown(msg["content"])
+    # Mostrar historial
+    for h in reversed(st.session_state["history"][-20:]):
+        if h["role"] == "user":
+            st.chat_message("user").markdown(h["content"])
         else:
             with st.chat_message("assistant"):
-                st.markdown(
-                    f"<div class='chat-bubble'>{msg['content']}</div>",
-                    unsafe_allow_html=True,
-                )
+                st.markdown(f"<div class='chat-bubble'>{h['content']}</div>",
+                            unsafe_allow_html=True)
 
-                # Voz en el navegador (masculina/neutra/grave + sync video)
                 if st.session_state["voice_on"]:
-                    speak_browser(msg["content"])
+                    speak_browser(h["content"])
             break
