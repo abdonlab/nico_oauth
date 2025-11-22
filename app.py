@@ -104,17 +104,21 @@ def ensure_session_defaults():
     st.session_state.setdefault("max_tokens", 256)
     st.session_state.setdefault("current_video", None)
     st.session_state.setdefault("open_cfg", False)
-    st.session_state.setdefault("greeted", False)  # saludo único por sesión
-    st.session_state.setdefault("user_input", "")   # para limpiar el input
+    # 👇 Para que solo salude una vez por usuario
+    st.session_state.setdefault("greeted", False)
 
 
 def header_html():
-    """Cabecera con logo UMSNH en el círculo (imagen estática)."""
-    # Logo estático en el círculo
-    logo_html = '<img class="nico-video" src="assets/img/nico_icon.png" alt="UMSNH" />'
+    """Cabecera con logo UMSNH estático en círculo."""
+    logo_path = "assets/img/nico_icon.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            b64_logo = base64.b64encode(f.read()).decode("utf-8")
+        logo_tag = f'<img class="nico-logo" src="data:image/png;base64,{b64_logo}" alt="UMSNH" />'
+    else:
+        logo_tag = '<div class="nico-placeholder"></div>'
 
-    # OJO: usamos string normal para evitar broncas de f-string con llaves
-    return """
+    return f"""
     <style>
     .nico-header {{
         background:#0f2347;
@@ -127,7 +131,7 @@ def header_html():
         align-items:center;
         gap:16px;
     }}
-    .nico-video, .nico-placeholder {{
+    .nico-logo, .nico-placeholder {{
         width:56px;
         height:56px;
         border-radius:50%;
@@ -154,7 +158,7 @@ def header_html():
     </style>
     <div class="nico-header">
         <div class="nico-wrap">
-            """ + logo_html + """
+            {logo_tag}
             <div>
                 <p class="nico-title">NICO</p>
                 <p class="nico-subtitle">Asistente Virtual UMSNH</p>
@@ -167,7 +171,7 @@ def header_html():
 def login_view():
     """Pantalla de login con botón de Google."""
     st.markdown(header_html(), unsafe_allow_html=True)
-    st.info("Inicia sesión con tu cuenta de Google para usar NICO.")
+    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
 
     if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
         st.error("Faltan variables de configuración OAuth.")
@@ -258,6 +262,7 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
             "topP": float(top_p),
             "maxOutputTokens": int(max_tokens),
         },
+        # Habilitamos la herramienta de búsqueda en la web
         "tools": [
             {
                 "google_search": {}
@@ -289,7 +294,7 @@ def speak_browser(text: str):
     if not text:
         return
 
-    payload = json.dumps(text)
+    payload = json.dumps(text)  # escapa comillas, etc.
 
     js_code = f"""
     <script>
@@ -305,6 +310,7 @@ def speak_browser(text: str):
             const voices = synth.getVoices() || [];
             let chosen = null;
 
+            // Preferir voces masculinas/neutras en español
             const preferNames = ["rocko", "miguel", "diego", "jorge", "pablo", "male", "hombre"];
             for (const v of voices) {{
                 const name = (v.name || "").toLowerCase();
@@ -320,6 +326,7 @@ def speak_browser(text: str):
                 if (chosen) break;
             }}
 
+            // Si no hay, cualquier voz en español
             if (!chosen) {{
                 for (const v of voices) {{
                     const lang = (v.lang || "").toLowerCase();
@@ -334,9 +341,11 @@ def speak_browser(text: str):
                 utter.voice = chosen;
             }}
 
-            utter.rate = 0.95;
-            utter.pitch = 0.65;
+            // Voz más grave / neutra
+            utter.rate = 0.95;   # un poco más lenta
+            utter.pitch = 0.65;  # más grave
 
+            // 🔥 Sincronización con el video
             utter.onstart = () => {{
                 const v = parent.document.querySelector('video');
                 if (v) {{ v.play(); }}
@@ -394,7 +403,9 @@ with conv_col:
     c1, c2, c3 = st.columns([0.1, 0.1, 0.8])
 
     with c1:
-        if st.button("🎙️ Voz: ON" if st.session_state["voice_on"] else "🔇 Voz: OFF"):
+        if st.button(
+            "🎙️ Voz: ON" if st.session_state["voice_on"] else "🔇 Voz: OFF"
+        ):
             st.session_state["voice_on"] = not st.session_state["voice_on"]
 
     with c2:
@@ -407,34 +418,37 @@ with conv_col:
     # Popover de configuración del modelo
     if st.session_state.get("open_cfg"):
         with st.popover("Configuración del Modelo"):
-            st.slider("Temperatura", 0.0, 1.5, key="temperature", help="Controla la creatividad")
+            st.slider(
+                "Temperatura", 0.0, 1.5, key="temperature", help="Controla la creatividad"
+            )
             st.slider("Top-P", 0.0, 1.0, key="top_p")
-            st.slider("Máx. tokens", 64, 2048, key="max_tokens", step=32)
+            st.slider(
+                "Máx. tokens",
+                64,
+                2048,
+                key="max_tokens",
+                step=32,
+            )
             if st.button("Cerrar"):
                 st.session_state["open_cfg"] = False
 
     st.markdown("### 💬 Conversación")
 
-    # Entrada del usuario + botón borrar
+    # Entrada del usuario
     col_input, col_clear = st.columns([0.8, 0.2])
     with col_input:
-        user_msg = st.text_input("Escribe tu pregunta:", key="user_input")
+        user_msg = st.text_input("Escribe tu pregunta:", key="user_msg")
     with col_clear:
         if st.button("🧹 Borrar"):
-            st.session_state["user_input"] = ""
-            st.session_state["_clear_flag"] = True
-            st.rerun()
+            st.session_state["user_msg"] = ""
+            st.experimental_rerun()
 
-    if st.session_state.get("_clear_flag"):
-        st.session_state["_clear_flag"] = False
+    user_msg = st.session_state.get("user_msg", "")
 
-    # Botón Enviar
-    if st.button("Enviar") and st.session_state["user_input"].strip():
-        user_msg = st.session_state["user_input"].strip()
-
+    if st.button("Enviar") and user_msg.strip():
         # Guardar mensaje de usuario
         st.session_state["history"].append(
-            {"role": "user", "content": user_msg}
+            {"role": "user", "content": user_msg.strip()}
         )
 
         # Seleccionar y mostrar video aleatorio en la columna derecha
@@ -464,24 +478,27 @@ with conv_col:
         except Exception as e:
             st.warning(f"No se pudo reproducir el video: {e}")
 
-        # System prompt con páginas oficiales
+        # Llamada a Gemini (ahora con web search habilitado)
         sys_prompt = (
+            "IMPORTANT: No uses Markdown ni símbolos de formato. No uses negritas, "
+            "no uses asteriscos, no uses guiones, no uses listas, no uses encabezados. "
+            "Responde únicamente en texto plano sin ningún tipo de formato.\n\n"
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
-            "Responde siempre en español, de forma clara, breve y amable. Cuando lo necesites usa búsqueda web. "
-            "Consulta y prioriza SIEMPRE estos sitios oficiales y sus subpáginas: "
-            "https://www.umich.mx "
-            "https://umich.mx/unidades-administrativas/ "
-            "https://www.gacetanicolaita.umich.mx/ "
-            "https://www.dce.umich.mx/ "
-            "https://www.dce.umich.mx/guias/guia-inscripciones-en-linea/ "
-            "https://www.dce.umich.mx/guias/guia-para-generar-orden-de-pago-de-certificados-cartas-de-pasante-y-certificacion-de-firmas/ "
-            "https://siia.umich.mx "
-            "https://siia.umich.mx/escolar/convocatoria_23-24/convocatoria-bachillerato.html "
-            "https://www.bachillerato.umich.mx/index.php/planteles "
-            "https://www.colegio.umich.mx/ "
-            "https://www.umich.mx/oferta-med.html "
-            "https://www.umich.mx/oferta-sup.html "
-            "https://www.umich.mx/oferta-posgrado.html "
+            "Responde siempre en español, de forma clara, breve y amable. Cuando lo necesites, usa la búsqueda web.\n\n"
+            "Consulta y prioriza SIEMPRE estos sitios oficiales y sus subpáginas:\n"
+            "- https://www.umich.mx\n"
+            "- https://umich.mx/unidades-administrativas/\n"
+            "- https://www.gacetanicolaita.umich.mx/\n"
+            "- https://www.dce.umich.mx/\n"
+            "- https://www.dce.umich.mx/guias/guia-inscripciones-en-linea/\n"
+            "- https://www.dce.umich.mx/guias/guia-para-generar-orden-de-pago-de-certificados-cartas-de-pasante-y-certificacion-de-firmas/\n"
+            "- https://siia.umich.mx/\n"
+            "- https://siia.umich.mx/escolar/convocatoria_23-24/convocatoria-bachillerato.html\n"
+            "- https://www.bachillerato.umich.mx/index.php/planteles\n"
+            "- https://www.colegio.umich.mx/\n"
+            "- https://www.umich.mx/oferta-med.html\n"
+            "- https://www.umich.mx/oferta-sup.html\n"
+            "- https://www.umich.mx/oferta-posgrado.html\n"
             "Si la respuesta se basa en información encontrada en la web, menciónalo brevemente al final."
         )
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
@@ -496,22 +513,23 @@ with conv_col:
         # 👋 Saludo único SOLO al iniciar sesión
         name = st.session_state["profile"].get("name", "")
         if not st.session_state["greeted"]:
+            # saludo completo SOLO al inicio de sesión
             if name:
                 saludo = (
-                    f"Hola {name}, soy NICO, tu asistente virtual de la Universidad "
-                    "Michoacana de San Nicolás de Hidalgo.\n\n"
+                    f"Hola {name}, soy NICO, tu asistente virtual de la "
+                    "Universidad Michoacana de San Nicolás de Hidalgo (UMSNH).\n\n"
                 )
             else:
                 saludo = (
-                    "Hola, soy NICO, tu asistente virtual de la Universidad "
-                    "Michoacana de San Nicolás de Hidalgo.\n\n"
+                    "Hola, soy NICO, tu asistente virtual de la "
+                    "Universidad Michoacana de San Nicolás de Hidalgo (UMSNH).\n\n"
                 )
             reply = saludo + (reply or "")
             st.session_state["greeted"] = True
         else:
-            # saludos naturales en mensajes posteriores
+            # saludos naturales sin exagerar en mensajes posteriores
             if name:
-                reply = f"{name}, {reply}"
+                reply = f"Claro {name}, " + reply
 
         # Guardar respuesta del asistente
         st.session_state["history"].append(
@@ -530,6 +548,8 @@ with conv_col:
                     f"<div class='chat-bubble'>{msg['content']}</div>",
                     unsafe_allow_html=True,
                 )
+
+                # Voz en el navegador (masculina/neutra/grave + sync video)
                 if st.session_state["voice_on"]:
                     speak_browser(msg["content"])
             break
