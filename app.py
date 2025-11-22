@@ -133,12 +133,13 @@ def header_html():
         align-items:center;
         gap:16px;
     }}
-    .nico-video, .nico-placeholder {
+    .nico-video, .nico-placeholder {{
         width:56px;
         height:56px;
         border-radius:50%;
         object-fit:cover;
         background:#fff0;
+    }}
         font-size:26px;
         font-weight:800;
         margin:0;
