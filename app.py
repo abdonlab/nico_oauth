@@ -36,10 +36,10 @@ _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
     parsed = urllib.parse.urlparse(_request_uri)
     query = urllib.parse.parse_qs(parsed.query)
-    # Convertir valores de lista a string para el nuevo query_params
+    # Convertir valores de lista a string
     query_clean = {k: v[0] for k, v in query.items()}
     st.query_params.update(query_clean)
-    st.rerun() # <--- CORREGIDO
+    st.rerun()
 
 # ------------------------------------------------------------
 # Cargar variables de entorno
@@ -47,9 +47,7 @@ if "/oauth2callback" in _request_uri:
 load_dotenv()
 
 CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
-CLIENT_SECRET = st.secrets.get(
-    "GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", "")
-)
+CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", ""))
 GOOGLE_REDIRECT_URI = st.secrets.get(
     "GOOGLE_REDIRECT_URI",
     os.getenv("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/"),
@@ -62,9 +60,7 @@ SCOPES = [
 ]
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
-GEMINI_MODEL = st.secrets.get(
-    "GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-preview-02-05")
-)
+GEMINI_MODEL = st.secrets.get("GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-preview-02-05"))
 
 # ============================================================
 # Funciones auxiliares
@@ -105,12 +101,11 @@ def ensure_session_defaults():
     st.session_state.setdefault("current_video", None)
     st.session_state.setdefault("open_cfg", False)
     st.session_state.setdefault("greeted", False)
-    # Nuevos para el control de input
     st.session_state.setdefault("input_val", "")
     st.session_state.setdefault("trigger_run", False)
 
 # ============================================================
-# 🔵 HEADER NUEVO (ÚNICO CAMBIO SOLICITADO)
+# 🔵 HEADER NUEVO (ÚNICO CAMBIO QUE ME PEDISTE)
 # ============================================================
 
 def header_html():
@@ -168,11 +163,15 @@ def header_html():
 def login_view():
     st.markdown(header_html(), unsafe_allow_html=True)
     st.info("🔒 Acceso restringido. Inicia sesión con tu cuenta institucional o Google.")
-    
+
+    # ⭐ FIX: evitar KeyError por oauth_state
+    if "oauth_state" not in st.session_state:
+        st.session_state["oauth_state"] = str(uuid.uuid4())
+
     state_key = st.session_state["oauth_state"]
     flow = get_flow(state=state_key)
     auth_url, _ = flow.authorization_url(prompt="consent")
-    
+
     st.markdown(f"""
         <a href="{auth_url}" target="_self" style="
             display: inline-block; text-decoration: none; color: white;
@@ -211,20 +210,16 @@ def exchange_code_for_token():
 
         st.query_params.clear()
         st.rerun()
-
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
 
 # ============================================================
-# Gemini 2.0 con búsqueda en internet
+# Gemini 2.0 con búsqueda web
 # ============================================================
 
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-    }
+    headers = { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY }
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -239,16 +234,18 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
         r = requests.post(endpoint, headers=headers, json=payload, timeout=40)
         r.raise_for_status()
         data = r.json()
+
         text = ""
         for cand in data.get("candidates", []):
             for part in cand.get("content", {}).get("parts", []):
                 text += part.get("text", "")
-        return text.strip() or "No obtuve respuesta del modelo."
+        return text.strip() or "No obtuve respuesta."
     except Exception as e:
         return f"⚠️ Error con Gemini: {e}"
 
+
 # ============================================================
-# Sincronización de voz + video
+# Web Speech API sync con video
 # ============================================================
 
 def speak_browser(text: str):
@@ -263,8 +260,7 @@ def speak_browser(text: str):
         if (!synth) return;
 
         function findVideo() {{
-            const v = parent.document.querySelector('video');
-            return v;
+            return parent.document.querySelector('video');
         }}
 
         function speak() {{
@@ -273,45 +269,37 @@ def speak_browser(text: str):
             const voices = synth.getVoices() || [];
             let chosen = null;
             
-            const preferNames = ["rocko", "miguel", "diego", "jorge", "pablo", "male", "hombre"];
+            const pref = ["rocko","miguel","diego","jorge","male","hombre"];
             for (const v of voices) {{
-                const name = (v.name || "").toLowerCase();
-                const lang = (v.lang || "").toLowerCase();
-                if (lang.startsWith("es")) {{
-                    for (const pref of preferNames) {{
-                        if (name.includes(pref)) {{ chosen = v; break; }}
-                    }}
-                }}
-                if (chosen) break;
-            }}
-            if (!chosen) {{
-                for (const v of voices) {{
-                    if (v.lang.toLowerCase().startsWith("es")) {{ chosen = v; break; }}
+                if (v.lang.toLowerCase().startsWith("es")) {{
+                    for (const p of pref)
+                        if ((v.name||"").toLowerCase().includes(p)) chosen = v;
                 }}
             }}
+            if (!chosen)
+                for (const v of voices)
+                    if (v.lang.toLowerCase().startsWith("es")) chosen = v;
+
             if (chosen) utter.voice = chosen;
 
             utter.rate = 0.95;
             utter.pitch = 0.65;
 
-            utter.onstart = () => {{ const v = findVideo(); if (v) v.play(); }};
-            utter.onend = () => {{ const v = findVideo(); if (v) v.pause(); }};
+            utter.onstart = () => {{ const v=findVideo(); if(v) v.play(); }};
+            utter.onend   = () => {{ const v=findVideo(); if(v) v.pause(); }};
 
             synth.speak(utter);
         }}
 
-        if (synth.getVoices().length === 0) {{
-            synth.addEventListener('voiceschanged', function handler() {{
-                synth.removeEventListener('voiceschanged', handler);
-                speak();
-            }});
-        }} else {{
-            speak();
-        }}
+        if (synth.getVoices().length === 0)
+            synth.addEventListener('voiceschanged', ()=>speak());
+        else speak();
     }})();
     </script>
     """
+
     components.html(js_code, height=0)
+
 
 # ============================================================
 # Lógica principal de la app
@@ -333,7 +321,6 @@ conv_col, video_col = st.columns([0.7, 0.3])
 with video_col:
     video_container = st.empty()
     
-    # Mostrar video actual o generar uno inicial
     if not st.session_state["current_video"]:
         try:
             video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
@@ -353,7 +340,6 @@ with video_col:
         video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
 
 with conv_col:
-    # Barra superior de controles
     c1, c2, c3 = st.columns([0.15, 0.15, 0.7])
     with c1:
         if st.button("🎙️ Voz: " + ("ON" if st.session_state["voice_on"] else "OFF")):
@@ -365,7 +351,7 @@ with conv_col:
     with c3:
         st.write(f"Bienvenido, **{st.session_state['profile'].get('name', '')}**")
 
-    if st.session_state.get("open_cfg"):
+    if st.session_state["open_cfg"]:
         with st.expander("Configuración del Modelo"):
             st.slider("Temperatura", 0.0, 1.5, key="temperature")
             st.slider("Top-P", 0.0, 1.0, key="top_p")
@@ -376,8 +362,6 @@ with conv_col:
 
     st.markdown("### 💬 Conversación")
 
-    # NUEVA LÓGICA INPUT (sin cambios)
-    
     def action_submit():
         if st.session_state["input_val"].strip():
             st.session_state["trigger_run"] = True
@@ -387,32 +371,28 @@ with conv_col:
         st.session_state["trigger_run"] = False
 
     st.text_input(
-        "Escribe tu pregunta:", 
-        key="input_val", 
+        "Escribe tu pregunta:",
+        key="input_val",
         on_change=action_submit
     )
 
-    # Botones lado a lado
-    btn_c1, btn_c2, _ = st.columns([0.15, 0.15, 0.7])
-    with btn_c1:
+    bc1, bc2, _ = st.columns([0.15,0.15,0.7])
+    with bc1:
         st.button("Enviar 🚀", on_click=action_submit)
-    with btn_c2:
+    with bc2:
         st.button("Borrar 🗑️", on_click=action_clear)
 
-    # Procesar consulta
     if st.session_state["trigger_run"]:
         user_msg = st.session_state["input_val"]
-        
-        st.session_state["history"].append({"role": "user", "content": user_msg})
+        st.session_state["history"].append({"role":"user","content":user_msg})
 
-        # VIDEO ALEATORIO (igual que antes)
         try:
             video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
             if video_files:
                 chosen = random.choice(video_files)
                 video_path = os.path.join("assets/videos", chosen)
-                with open(video_path, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode("utf-8")
+                with open(video_path,"rb") as f: 
+                    b64 = base64.b64encode(f.read()).decode()
                 
                 html_video = f"""
                 <video width="220" autoplay loop muted playsinline style="border-radius:12px;">
@@ -424,11 +404,10 @@ with conv_col:
         except Exception as e:
             st.warning(f"Video error: {e}")
 
-        # Obtención del nombre EXACTO como estaba en tu código
-        full_name = st.session_state['profile'].get('name', 'Usuario')
+        full_name = st.session_state['profile'].get('name','Usuario')
         first_name = full_name.split(' ')[0] if full_name else 'Amigo'
 
-        # TU PROMPT EXACTO (NO modificado)
+        # ⭐ TU PROMPT ORIGINAL (no tocado)
         sys_prompt = (
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
             f"El usuario se llama {first_name}. "
@@ -447,7 +426,7 @@ with conv_col:
             "- https://www.dce.umich.mx\n"
             "- https://siia.umich.mx\n"
         )
-        
+
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
 
         reply = gemini_generate(
@@ -457,18 +436,16 @@ with conv_col:
             st.session_state["max_tokens"],
         )
 
-        # Saludo único (sin tocar)
         if not st.session_state["greeted"]:
             saludo = f"¡Hola {first_name}! Soy NICO, tu asistente virtual.\n\n"
             reply = saludo + reply
             st.session_state["greeted"] = True
 
-        st.session_state["history"].append({"role": "assistant", "content": reply})
+        st.session_state["history"].append({"role":"assistant","content":reply})
         
         st.session_state["trigger_run"] = False
         st.rerun()
 
-    # Mostrar historial (igualito)
     for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
