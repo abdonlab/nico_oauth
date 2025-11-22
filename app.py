@@ -1,6 +1,6 @@
 # ============================================================
 # NICO: Asistente Virtual UMSNH
-# Versión Final Corregida (Estructura, Rerun, UI, No Negritas)
+# Versión Final Corregida (UI, Login Botón, No Negritas, URLs Aseguradas)
 # ============================================================
 
 import os
@@ -50,6 +50,7 @@ CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = st.secrets.get(
     "GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", "")
 )
+# Asegurando el GOOGLE_REDIRECT_URI de tu código de referencia
 GOOGLE_REDIRECT_URI = st.secrets.get(
     "GOOGLE_REDIRECT_URI",
     os.getenv("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/"),
@@ -113,7 +114,8 @@ def ensure_session_defaults():
 def header_html():
     """Cabecera visual con icono del zorro 🦊 y estilo alineado."""
     video_path = "assets/videos/nico_header_video.mp4"
-    video_tag = '<div class="nico-placeholder">🦊</div>'
+    # Placeholder con el zorro 🦊
+    video_tag = '<div class="nico-placeholder">🦊</div>' 
     
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
@@ -134,7 +136,11 @@ def header_html():
         margin-bottom: 20px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }}
-    .nico-wrap {{ display: flex; align-items: center; gap: 16px; }}
+    .nico-wrap {{ 
+        display: flex; 
+        align-items: center; 
+        gap: 16px; 
+    }}
     .nico-video, .nico-placeholder {{
         width: 60px; height: 60px; border-radius: 50%;
         background: #fff; object-fit: cover; border: 2px solid #ffd700;
@@ -159,9 +165,11 @@ def header_html():
     """
 
 def login_view():
-    """Pantalla de login con botón de Google estilizado y relleno."""
+    """Pantalla de login con botón de Google estilizado."""
     st.markdown(header_html(), unsafe_allow_html=True)
-    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
+    
+    # Mensaje corto sin relleno
+    st.info("Inicia sesión para usar **NICO**.") 
 
     if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
         st.error("Faltan variables de configuración OAuth.")
@@ -205,7 +213,6 @@ def login_view():
 def exchange_code_for_token():
     """Intercambiar el código OAuth por tokens y obtener perfil."""
     try:
-        # Usamos st.query_params para Streamlit moderno
         params = st.query_params
         code = params.get("code")
         state = params.get("state")
@@ -237,7 +244,7 @@ def exchange_code_for_token():
             "picture": idinfo.get("picture"),
         }
 
-        st.query_params.clear() # Limpiar URL
+        st.query_params.clear() 
         st.rerun()
 
     except Exception as e:
@@ -461,7 +468,7 @@ with conv_col:
         full_name = st.session_state['profile'].get('name', 'Usuario')
         first_name = full_name.split(' ')[0] if full_name else 'Amigo'
 
-        # 4. Prompt con Nombre Natural y Restricción de Formato
+        # 4. Prompt con Nombre Natural y URLs aseguradas
         sys_prompt = ( 
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
             f"El usuario se llama {first_name}. "
@@ -470,8 +477,8 @@ with conv_col:
             "IMPORTANTE: No uses negritas (**texto**) ni formato markdown pesado en tus respuestas. Escribe solo texto plano.\n\n"
             "Usa la búsqueda web para información actualizada. Prioriza sitios *.umich.mx."
             "- https://www.umich.mx\n"
-            "-https://www.gacetanicolaita.umich.mx/n"
-            "-https://umich.mx/unidades-administrativas/n"
+            "- https://www.gacetanicolaita.umich.mx/n"
+            "- https://umich.mx/unidades-administrativas/n"
             "- https://www.dce.umich.mx\n"
             "- https://siia.umich.mx\n"          
         )
