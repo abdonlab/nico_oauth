@@ -20,8 +20,7 @@ from dotenv import load_dotenv
 # ------------------------------------------------------------
 st.set_page_config(
     page_title="NICO | Asistente Virtual UMSNH",
-    page_icon="🦊",
-    layout="wide",
+    page_icon="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAARGVYSWZNTQAqAAA...QFGxyYoLS0m8Y3RFDFVbwkS+XUGuID7/wfpWrcPxMXUMQAAAABJRU5ErkJggg==",    layout="wide",
 )
 
 # ------------------------------------------------------------
