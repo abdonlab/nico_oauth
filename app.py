@@ -1,5 +1,5 @@
 # ============================================================
-# NICO: Asistente Virtual UMSNH (Full Version)
+# NICO: Asistente Virtual UMSNH (Smart Name Version)
 # ============================================================
 
 import os
@@ -38,7 +38,7 @@ CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", ""))
 GOOGLE_REDIRECT_URI = st.secrets.get(
     "GOOGLE_REDIRECT_URI",
-    os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501/") # Cambiar en producción
+    os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8501/") 
 )
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
@@ -64,10 +64,10 @@ def ensure_session_defaults():
         "max_tokens": 512,
         "current_video_html": None,
         "last_spoken_id": None,
-        "greeted": False,
+        "greeted": False,         # Controla el saludo único
         "oauth_state": str(uuid.uuid4()),
-        "input_val": "",       # Texto del usuario
-        "trigger_run": False   # Bandera para ejecutar la IA
+        "input_val": "",
+        "trigger_run": False
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -97,7 +97,6 @@ def get_flow(state=None):
 
 def check_auth_callback():
     try:
-        # Soporte para nuevas versiones de Streamlit
         query_params = st.query_params
         code = query_params.get("code")
         state = query_params.get("state")
@@ -123,7 +122,7 @@ def check_auth_callback():
             st.error(f"Error de autenticación: {e}")
 
 # ------------------------------------------------------------
-# 5. Componentes UI (Header y Login)
+# 5. Componentes UI
 # ------------------------------------------------------------
 def header_html():
     video_path = "assets/videos/nico_header_video.mp4"
@@ -284,6 +283,10 @@ with col_video:
 with col_chat:
     st.write("### 💬 Conversación")
 
+    # Obtener el primer nombre del usuario
+    full_name = st.session_state["profile"].get("name", "")
+    first_name = full_name.split(" ")[0] if full_name else "Usuario"
+
     # Callbacks
     def action_submit():
         if st.session_state["input_val"].strip():
@@ -293,20 +296,17 @@ with col_chat:
         st.session_state["input_val"] = ""
         st.session_state["trigger_run"] = False
 
-    # Input de texto con Enter habilitado
     st.text_input("Escribe aquí:", key="input_val", on_change=action_submit)
 
-    # Botones
     c1, c2, c3 = st.columns([0.15, 0.15, 0.7])
     with c1: st.button("Enviar 🚀", on_click=action_submit)
     with c2: st.button("Borrar 🗑️", on_click=action_clear)
 
-    # Procesamiento
     if st.session_state["trigger_run"]:
         user_msg = st.session_state["input_val"]
         st.session_state["history"].append({"role": "user", "content": user_msg})
         
-        # Lógica video aleatorio
+        # Video Aleatorio
         try:
             vid_dir = "assets/videos"
             if os.path.exists(vid_dir):
@@ -322,20 +322,27 @@ with col_chat:
                     """
         except: pass
 
-        # Lógica Gemini
-        sys_prompt = "Eres NICO, asistente oficial de la UMSNH. Responde en español, claro y breve."
+        # --- LÓGICA DEL NOMBRE NATURAL ---
+        # 1. Le decimos a la IA cómo se llama el usuario en el prompt
+        sys_prompt = (
+            f"Eres NICO, asistente oficial de la UMSNH. "
+            f"El usuario se llama {first_name}. "
+            "Responde en español, de forma útil, clara y breve. "
+            "Usa el nombre del usuario ocasionalmente dentro de la conversación para que suene natural y cercano, pero no lo repitas en cada frase."
+        )
+        
         full_prompt = f"{sys_prompt}\n\nHistorial: {st.session_state['history'][-3:]}\n\nUsuario: {user_msg}"
         
         with st.spinner("Pensando..."):
             reply = gemini_generate(full_prompt)
 
+        # 2. Saludo MANUAL (Solo la primera vez en toda la sesión)
         if not st.session_state["greeted"]:
-            name = st.session_state["profile"].get("name", "").split(" ")[0]
-            reply = f"¡Hola {name}! " + reply
+            reply = f"¡Hola {first_name}! Soy NICO. " + reply
             st.session_state["greeted"] = True
 
         st.session_state["history"].append({"role": "assistant", "content": reply})
-        st.session_state["trigger_run"] = False # Reset trigger
+        st.session_state["trigger_run"] = False
         st.rerun()
 
     # Historial
