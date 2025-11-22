@@ -115,9 +115,7 @@ def header_html():
         with open(video_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("utf-8")
         video_tag = f"""
-        <video class="nico-video" autoplay loop muted playsinline>
-            <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-        </video>
+        <img class=\"nico-video\" src=\"assets/img/nico_icon.png\" alt=\"UMSNH\" />
         """
     else:
         video_tag = '<div class="nico-placeholder"></div>'
@@ -135,13 +133,13 @@ def header_html():
         align-items:center;
         gap:16px;
     }}
-    .nico-video,.nico-placeholder {{
+    .nico-video, .nico-placeholder {
         width:56px;
         height:56px;
         border-radius:50%;
-        background:#fff;
         object-fit:cover;
-    }}
+        background:#fff0;
+}}
     .nico-title {{
         font-size:26px;
         font-weight:800;
@@ -439,7 +437,20 @@ with conv_col:
     st.markdown("### 💬 Conversación")
 
     # Entrada del usuario
-    user_msg = st.text_input("Escribe tu pregunta:")
+    col_input, col_clear = st.columns([0.8, 0.2])
+    with col_input:
+        user_msg = st.text_input("Escribe tu pregunta:")
+    with col_clear:
+        if st.button("🧹 Borrar"):
+            user_msg = ""
+            st.session_state["_clear_flag"] = True
+            st.rerun()
+
+    if st.session_state.get("_clear_flag"):
+        user_msg = ""
+        st.session_state["_clear_flag"] = False
+
+    if st.button("Enviar") and user_msg.strip():("Escribe tu pregunta:")
 
     if st.button("Enviar") and user_msg.strip():
         # Guardar mensaje de usuario
@@ -477,14 +488,21 @@ with conv_col:
         # Llamada a Gemini (ahora con web search habilitado)
         sys_prompt = (
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
-            "Responde siempre en español, de forma clara, breve y amable.\n\n"
-            "Cuando lo necesites, usa la búsqueda web que ya está habilitada para consultar información actualizada.\n"
-            "PRIORIZA siempre los sitios oficiales de la UMSNH, por ejemplo:\n"
-            "- https://www.umich.mx\n"
-            "-https://www.gacetanicolaita.umich.mx/n"
-             "-https://umich.mx/unidades-administrativas/n"            "-https://umich.mx/unidades-administrativas/n"            "- https://www.dce.umich.mx\n"
-            "- https://siia.umich.mx\n"
-            "- y otros subdominios *.umich.mx\n\n"
+            "Responde siempre en español, de forma clara, breve y amable. Cuando lo necesites usa búsqueda web. "
+            "Consulta y prioriza SIEMPRE estos sitios oficiales y sus subpáginas: "
+            "https://www.umich.mx "
+            "https://umich.mx/unidades-administrativas/ "
+            "https://www.gacetanicolaita.umich.mx/ "
+            "https://www.dce.umich.mx/ "
+            "https://www.dce.umich.mx/guias/guia-inscripciones-en-linea/ "
+            "https://www.dce.umich.mx/guias/guia-para-generar-orden-de-pago-de-certificados-cartas-de-pasante-y-certificacion-de-firmas/ "
+            "https://siia.umich.mx "
+            "https://siia.umich.mx/escolar/convocatoria_23-24/convocatoria-bachillerato.html "
+            "https://www.bachillerato.umich.mx/index.php/planteles "
+            "https://www.colegio.umich.mx/ "
+            "https://www.umich.mx/oferta-med.html "
+            "https://www.umich.mx/oferta-sup.html "
+            "https://www.umich.mx/oferta-posgrado.html "
             "Si la respuesta se basa en información encontrada en la web, menciónalo brevemente al final."
         )
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
@@ -496,15 +514,21 @@ with conv_col:
             st.session_state["max_tokens"],
         )
 
-        # 👋 Saludo único en la PRIMERA respuesta
+                # 👋 Saludo único SOLO al iniciar sesión
+        name = st.session_state["profile"].get("name", "")
         if not st.session_state["greeted"]:
-            name = st.session_state["profile"].get("name", "")
-            if name:
-                saludo = f"Hola {name}, soy NICO, tu asistente virtual de la Universidad Michoacana de San Nicolas de Hidalgo.\n\n"
-            else:
-                saludo = "¡Hola!.\n\n"
+            # saludo completo SOLO al inicio de sesión
+            saludo = f"Hola {name}, soy NICO, tu asistente virtual de la Universidad Michoacana.
+
+" if name else "Hola, soy NICO.
+
+"
             reply = saludo + (reply or "")
             st.session_state["greeted"] = True
+        else:
+            # saludos naturales sin exagerar en mensajes posteriores
+            if name:
+                reply = f"{name}, {reply}"
 
         # Guardar respuesta del asistente
         st.session_state["history"].append(
