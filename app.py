@@ -450,7 +450,7 @@ with conv_col:
         user_msg = ""
         st.session_state["_clear_flag"] = False
 
-    if st.button("Enviar") and user_msg.strip():("Escribe tu pregunta:")
+    if st.button("Enviar") and user_msg.strip():
 
     if st.button("Enviar") and user_msg.strip():
         # Guardar mensaje de usuario
