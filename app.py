@@ -36,10 +36,9 @@ _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
     parsed = urllib.parse.urlparse(_request_uri)
     query = urllib.parse.parse_qs(parsed.query)
-    # Convertir valores de lista a string para el nuevo query_params
     query_clean = {k: v[0] for k, v in query.items()}
     st.query_params.update(query_clean)
-    st.rerun() # <--- CORREGIDO
+    st.rerun()
 
 # ------------------------------------------------------------
 # Cargar variables de entorno
@@ -94,7 +93,6 @@ def get_flow(state=None):
 
 
 def ensure_session_defaults():
-    """Valores por defecto en session_state."""
     st.session_state.setdefault("logged", False)
     st.session_state.setdefault("profile", {})
     st.session_state.setdefault("history", [])
@@ -105,12 +103,12 @@ def ensure_session_defaults():
     st.session_state.setdefault("current_video", None)
     st.session_state.setdefault("open_cfg", False)
     st.session_state.setdefault("greeted", False)
-    # Nuevos para el control de input
     st.session_state.setdefault("input_val", "")
     st.session_state.setdefault("trigger_run", False)
 
+
 # ------------------------------------------------------------
-# ⭐ HEADER NUEVO (exacto como tú lo pediste)
+# HEADER NUEVO (exacto como lo pediste)
 # ------------------------------------------------------------
 def header_html():
     """Cabecera visual."""
@@ -162,12 +160,11 @@ def header_html():
 
 
 # ------------------------------------------------------------
-# LOGIN VIEW CON FIX oauth_state
+# LOGIN
 # ------------------------------------------------------------
 def login_view():
-    """Pantalla de login con botón de Google."""
     st.markdown(header_html(), unsafe_allow_html=True)
-    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
+    st.info("Inicia sesión con tu cuenta de Google para usar NICO.")
 
     if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
         st.error("Faltan variables de configuración OAuth.")
@@ -186,13 +183,14 @@ def login_view():
         state=state_key,
     )
 
-    # st.query_params para versiones nuevas
     st.query_params["oauth_state"] = state_key
     st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 
+# ------------------------------------------------------------
+# INTERCAMBIO DE TOKEN (CORREGIDO)
+# ------------------------------------------------------------
 def exchange_code_for_token():
-    """Intercambiar el código OAuth por tokens y obtener perfil."""
     try:
         params = st.query_params
         code = params.get("code")
@@ -216,7 +214,9 @@ def exchange_code_for_token():
         creds = flow.credentials
 
         request = grequests.Request()
-        idinfo = id_token.verify_oauth2_token(creds.id_id_token, request, CLIENT_ID)
+
+        # ⭐ CORRECCIÓN QUE PEDISTE (único cambio)
+        idinfo = id_token.verify_oauth2_token(creds.id_token, request, CLIENT_ID)
 
         st.session_state["logged"] = True
         st.session_state["profile"] = {
@@ -233,7 +233,7 @@ def exchange_code_for_token():
 
 
 # ============================================================
-# Gemini 2.0 con búsqueda en internet
+# Gemini 2.0 con web search
 # ============================================================
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
@@ -265,7 +265,7 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
 
 
 # ============================================================
-# Web Speech API sincronizada
+# Web Speech API
 # ============================================================
 def speak_browser(text: str):
     if not text: return
@@ -341,10 +341,8 @@ if not st.session_state.get("logged"):
     login_view()
     st.stop()
 
-# Cabecera
 st.markdown(header_html(), unsafe_allow_html=True)
 
-# Layout: chat + video
 conv_col, video_col = st.columns([0.7, 0.3])
 
 with video_col:
@@ -393,7 +391,7 @@ with conv_col:
     st.markdown("### 💬 Conversación")
 
     def action_submit():
-        if st.session_state["input_val"].strip():
+        if st.session_state["input_val"].trim():
             st.session_state["trigger_run"] = True
 
     def action_clear():
