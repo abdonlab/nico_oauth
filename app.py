@@ -1,6 +1,6 @@
 # ============================================================
 # NICO OAuth + Gemini 2.0 Flash-Lite + Voz en Navegador
-# (Estructura Original + Mejoras de Chat)
+# (CORREGIDO: st.rerun y st.query_params para Streamlit nuevo)
 # ============================================================
 
 import os
@@ -30,14 +30,16 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# FIX redirección /oauth2callback en Streamlit Cloud (ORIGINAL)
+# FIX redirección /oauth2callback (Actualizado para st.query_params)
 # ------------------------------------------------------------
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
     parsed = urllib.parse.urlparse(_request_uri)
     query = urllib.parse.parse_qs(parsed.query)
-    st.experimental_set_query_params(**query)
-    st.experimental_rerun()
+    # Convertir valores de lista a string para el nuevo query_params
+    query_clean = {k: v[0] for k, v in query.items()}
+    st.query_params.update(query_clean)
+    st.rerun() # <--- CORREGIDO
 
 # ------------------------------------------------------------
 # Cargar variables de entorno
@@ -65,7 +67,7 @@ GEMINI_MODEL = st.secrets.get(
 )
 
 # ============================================================
-# Funciones auxiliares (ORIGINALES)
+# Funciones auxiliares
 # ============================================================
 
 def get_flow(state=None):
@@ -194,20 +196,26 @@ def login_view():
         state=state_key,
     )
 
-    st.experimental_set_query_params(oauth_state=state_key)
+    # st.query_params para versiones nuevas
+    st.query_params["oauth_state"] = state_key
     st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 
 def exchange_code_for_token():
-    """Intercambiar el código OAuth por tokens y obtener perfil del usuario."""
-    params = st.experimental_get_query_params()
-    if "code" not in params or "state" not in params:
+    """Intercambiar el código OAuth por tokens y obtener perfil."""
+    # CAMBIO IMPORTANTE: Usar st.query_params en lugar de experimental
+    try:
+        # En nuevas versiones es un objeto tipo dict, no devuelve listas por defecto
+        params = st.query_params
+        code = params.get("code")
+        state = params.get("state")
+    except:
+        return
+
+    if not code or not state:
         return
 
     try:
-        code = params["code"][0]
-        state = params["state"][0]
-
         if "oauth_state" not in st.session_state:
             st.session_state["oauth_state"] = state
 
@@ -229,8 +237,8 @@ def exchange_code_for_token():
             "picture": idinfo.get("picture"),
         }
 
-        st.experimental_set_query_params()
-        st.rerun()
+        st.query_params.clear() # Limpiar URL
+        st.rerun() # <--- CORREGIDO
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
@@ -275,7 +283,6 @@ def speak_browser(text: str):
     if not text: return
     payload = json.dumps(text)
 
-    # Pequeña optimización: IDs para el video activo
     js_code = f"""
     <script>
     (function() {{
@@ -284,7 +291,6 @@ def speak_browser(text: str):
         if (!synth) return;
 
         function findVideo() {{
-            // Buscar video activo en el DOM (inyectado por Streamlit)
             const v = parent.document.querySelector('video');
             return v;
         }}
@@ -295,7 +301,6 @@ def speak_browser(text: str):
             const voices = synth.getVoices() || [];
             let chosen = null;
             
-            // Preferir voces masculinas/neutras en español
             const preferNames = ["rocko", "miguel", "diego", "jorge", "pablo", "male", "hombre"];
             for (const v of voices) {{
                 const name = (v.name || "").toLowerCase();
@@ -359,7 +364,6 @@ with video_col:
     
     # Mostrar video actual o generar uno inicial
     if not st.session_state["current_video"]:
-        # Cargar un video por defecto al inicio para que no quede vacío
         try:
             video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
             if video_files:
@@ -383,7 +387,7 @@ with conv_col:
     with c1:
         if st.button("🎙️ Voz: " + ("ON" if st.session_state["voice_on"] else "OFF")):
             st.session_state["voice_on"] = not st.session_state["voice_on"]
-            st.experimental_rerun()
+            st.rerun() # <--- CORREGIDO
     with c2:
         if st.button("⚙️ Config"):
             st.session_state["open_cfg"] = True
@@ -397,7 +401,7 @@ with conv_col:
             st.slider("Máx. tokens", 64, 2048, key="max_tokens", step=32)
             if st.button("Cerrar Config"):
                 st.session_state["open_cfg"] = False
-                st.experimental_rerun()
+                st.rerun() # <--- CORREGIDO
 
     st.markdown("### 💬 Conversación")
 
@@ -443,8 +447,6 @@ with conv_col:
                 with open(video_path, "rb") as f:
                     b64 = base64.b64encode(f.read()).decode("utf-8")
                 
-                # ID 'active-video' para que el JS lo encuentre mejor si es necesario, 
-                # pero mantenemos la estructura simple original
                 html_video = f"""
                 <video width="220" autoplay loop muted playsinline style="border-radius:12px;">
                     <source src="data:video/mp4;base64,{b64}" type="video/mp4">
@@ -486,7 +488,7 @@ with conv_col:
         
         # Bajamos la bandera pero NO borramos el input
         st.session_state["trigger_run"] = False
-        st.experimental_rerun()
+        st.rerun() # <--- CORREGIDO
 
     # Mostrar historial
     for msg in reversed(st.session_state["history"][-20:]):
