@@ -108,7 +108,8 @@ def ensure_session_defaults():
 def header_html():
     """Cabecera visual."""
     video_path = "assets/videos/nico_header_video.mp4"
-    video_tag = '<div class="nico-placeholder"src="assets/>🦊</div>'
+    video_tag = '<div class="nico-placeholder">🦊</div>'
+    
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("utf-8")
