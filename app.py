@@ -455,6 +455,7 @@ with conv_col:
             "**IMPORTANTE: NO saludes al inicio de tu respuesta (ej. no digas 'Hola', 'Buenos días', 'Qué tal {nombre}'). El sistema ya saluda por ti la primera vez. Comienza directamente con la información solicitada o la respuesta a la pregunta.**"
             "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n"
             "IMPORTANTE: No uses negritas (*texto*) ni formato markdown pesado en tus respuestas. Escribe solo texto plano.\n\n"
+            "se responsable e incluyente y eficiente y ético"
             "Usa la búsqueda web para información actualizada. Prioriza sitios *.umich.mx."
             "- https://www.umich.mx\n"
             "para ultimas noticias busca en https://www.gacetanicolaita.umich.mx/"
@@ -463,7 +464,7 @@ with conv_col:
             "-https://umich.mx/unidades-administrativas/n"
             "- https://www.dce.umich.mx\n"
             "- https://siia.umich.mx\n"
-             "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."        )
+             "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027.")
         full_prompt = f"{sys_prompt}\n\nUsuario: {user_msg}"
 
         reply = gemini_generate(
