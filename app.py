@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 # ------------------------------------------------------------
 # Configuración inicial de Streamlit
 # ------------------------------------------------------------
-# 🎯 CORRECCIÓN DE SINTAXIS (Se eliminan caracteres invisibles U+00A0 de la línea 22)
+# 🎯 CORRECCIÓN DE SINTAXIS (Se eliminan caracteres invisibles U+00A0)
 st.set_page_config(
     page_title="NICO | Asistente Virtual UMSNH",
     page_icon="🦊",
@@ -26,7 +26,7 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# FIX redirección /oauth2callback (Actualizado para st.query_params)
+# FIX redirección /oauth2callback (al inicio del archivo)
 # ------------------------------------------------------------
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
@@ -186,7 +186,6 @@ def login_view():
 
 def exchange_code_for_token():
     """Intercambiar el código OAuth por tokens y obtener perfil."""
-    # CAMBIO IMPORTANTE: Usar st.query_params en lugar de experimental
     try:
         # En nuevas versiones es un objeto tipo dict, no devuelve listas por defecto
         params = st.query_params
@@ -198,7 +197,7 @@ def exchange_code_for_token():
     if not code or not state:
         return
 
-    # 🌟 CORRECCIÓN AUTH: Bloquear la doble ejecución
+    # 🌟 CORRECCIÓN AUTH: Bloquear la doble ejecución (Previene invalid_grant)
     if st.session_state.get("is_exchanging_token"):
         return
 
@@ -234,26 +233,26 @@ def exchange_code_for_token():
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
-        # Limpiar la bandera y la URL en caso de fallo (invalid_grant)
+        # Limpiar la bandera y la URL en caso de fallo
         st.session_state["is_exchanging_token"] = False
         st.query_params.clear()
         st.rerun()
 
 
 # ============================================================
-# Gemini 2.0 con búsqueda en internet
+# Gemini 2.0 con búsqueda en internet (REVERTIDO A PROMPT ÚNICO)
 # ============================================================
-# 🌟 CORRECCIÓN HISTORIAL: Ahora acepta el historial (contents) y el system_instruction
-def gemini_generate(contents: list, temperature: float, top_p: float, max_tokens: int, system_instruction: str) -> str:
+# 🌟 CORRECCIÓN GEMINI: Revertido a formato de prompt de texto único para evitar el error 400.
+def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY,
     }
+    # Payload simple: Envía todo el historial y las instrucciones como texto en 'contents'
     payload = {
-        "contents": contents, # Pasa el historial completo de la conversación
-        "config": {
-            "systemInstruction": system_instruction, # Pasa el system prompt aquí
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
             "temperature": float(temperature),
             "topP": float(top_p),
             "maxOutputTokens": int(max_tokens),
@@ -369,7 +368,7 @@ with video_col:
                 video_path = os.path.join("assets/videos", chosen)
                 with open(video_path, "rb") as f:
                     b64 = base64.b64encode(f.read()).decode("utf-8")
-                # MODIFICADO: Se eliminó 'autoplay' para que espere a la voz
+                
                 st.session_state["current_video"] = f"""
                 <video width="220" loop muted playsinline style="border-radius:12px;">
                     <source src="data:video/mp4;base64,{b64}" type="video/mp4">
@@ -446,7 +445,6 @@ with conv_col:
                 with open(video_path, "rb") as f:
                     b64 = base64.b64encode(f.read()).decode("utf-8")
                 
-                # MODIFICADO: Se eliminó 'autoplay' para que espere a la voz
                 html_video = f"""
                 <video width="220" loop muted playsinline style="border-radius:12px;">
                     <source src="data:video/mp4;base64,{b64}" type="video/mp4">
@@ -461,7 +459,7 @@ with conv_col:
         full_name = st.session_state['profile'].get('name', 'Usuario')
         first_name = full_name.split(' ')[0] if full_name else 'Amigo'
 
-        # 4. Prompt del Sistema (SIN MODIFICACIONES)
+        # 4. Prompt del Sistema (CONSTANTE)
         sys_prompt = (
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
             f"El usuario se llama {first_name}. "
@@ -482,31 +480,32 @@ with conv_col:
             "- https://siia.umich.mx\n"
             "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027.")
 
-        # 5. Formatear el historial para la API de Gemini (🌟 CORRECCIÓN HISTORIAL)
-        contents_for_api = []
+        # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL (para el error 400)
+        full_prompt = sys_prompt + "\n\n--- HISTORIAL DE CONVERSACIÓN ---\n"
         
-        # Iterar sobre el historial, asegurando el formato y mapeo de roles
-        for msg in st.session_state["history"]:
-            # El rol 'assistant' se mapea a 'model' en la API
-            role = "model" if msg["role"] == "assistant" else "user"
+        # Iterar sobre el historial para concatenar el texto (máx. 10 mensajes)
+        # Se invierte el historial para dar más peso al final de la conversación
+        history_text = ""
+        # Usamos los últimos 10 mensajes para mantener el contexto
+        for msg in st.session_state["history"][-10:]: 
+            role = "Asistente" if msg["role"] == "assistant" else "Usuario"
             content = msg["content"]
             
-            # Omitir el saludo inicial si existe, ya que es una inyección de Streamlit
+            # Omitir el saludo inyectado en el historial para no confundir al modelo
             if not st.session_state["greeted"] and content.startswith(f"¡Hola {first_name}!") and msg["role"] == "assistant":
-                continue
-                
-            contents_for_api.append({
-                "role": role,
-                "parts": [{"text": content}]
-            })
+                continue 
             
-        # 6. Llamar a la función `gemini_generate` con el historial y el system_instruction.
+            history_text += f"{role}: {content}\n"
+        
+        full_prompt += history_text
+        full_prompt += f"\n--- FIN DEL HISTORIAL ---\n\nÚltimo mensaje del Usuario: {user_msg}"
+        
+        # 6. Llamar a la función gemini_generate con el prompt de texto único
         reply_raw = gemini_generate(
-            contents_for_api,
+            full_prompt,
             st.session_state["temperature"],
             st.session_state["top_p"],
             st.session_state["max_tokens"],
-            sys_prompt # Pasar el prompt del sistema como instrucción
         )
         
         # 7. Saludo Único (Solo la primera vez)
