@@ -298,7 +298,7 @@ def speak_browser(text: str):
             const voices = synth.getVoices() || [];
             let chosen = null;
             
-            const preferNames = ["rocko", "miguel", "diego", "jorge", "pablo", "male", "hombre"];
+            const preferNames = ["miguel", "diego", "jorge", "pablo", "male", "hombre"];
             for (const v of voices) {{
                 const name = (v.name || "").toLowerCase();
                 const lang = (v.lang || "").toLowerCase();
