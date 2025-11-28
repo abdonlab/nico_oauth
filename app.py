@@ -18,7 +18,6 @@ from dotenv import load_dotenv
 # ------------------------------------------------------------
 # Configuración inicial de Streamlit
 # ------------------------------------------------------------
-# 🎯 CORRECCIÓN DE SINTAXIS (Se eliminan caracteres invisibles U+00A0)
 st.set_page_config(
     page_title="NICO | Asistente Virtual UMSNH",
     page_icon="🦊",
@@ -109,9 +108,10 @@ def ensure_session_defaults():
 
 
 def header_html():
-    """Cabecera visual."""
+    """Cabecera visual con icono del zorro 🦊 y estilo alineado."""
     video_path = "assets/videos/nico_header_video.mp4"
-    video_tag = '<div class="nico-placeholder">🦊</div>'
+    # Placeholder con el zorro 🦊
+    video_tag = '<div class="nico-placeholder">🦊</div>' 
     
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
@@ -132,7 +132,11 @@ def header_html():
         margin-bottom: 20px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }}
-    .nico-wrap {{ display: flex; align-items: center; gap: 16px; }}
+    .nico-wrap {{ 
+        display: flex; 
+        align-items: center; 
+        gap: 16px; 
+    }}
     .nico-video, .nico-placeholder {{
         width: 60px; height: 60px; border-radius: 50%;
         background: #fff; object-fit: cover; border: 2px solid #ffd700;
@@ -158,9 +162,11 @@ def header_html():
 
 
 def login_view():
-    """Pantalla de login con botón de Google."""
+    """Pantalla de login con botón de Google estilizado."""
     st.markdown(header_html(), unsafe_allow_html=True)
-    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
+    
+    # Mensaje corto sin relleno
+    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.") 
 
     if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
         st.error("Faltan variables de configuración OAuth.")
@@ -179,15 +185,31 @@ def login_view():
         state=state_key,
     )
 
-    # st.query_params para versiones nuevas
     st.query_params["oauth_state"] = state_key
-    st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
+    
+    # Botón de Login estilizado
+    st.markdown(f"""
+    <a href="{auth_url}" target="_self" style="
+        display: inline-block;
+        background-color: #4285F4; /* Azul Google */
+        color: white;
+        padding: 12px 24px;
+        text-decoration: none;
+        border-radius: 6px;
+        font-family: sans-serif;
+        font-weight: bold;
+        font-size: 16px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        margin-top: 10px;
+    ">
+        🔐 Iniciar sesión con Google
+    </a>
+    """, unsafe_allow_html=True)
 
 
 def exchange_code_for_token():
     """Intercambiar el código OAuth por tokens y obtener perfil."""
     try:
-        # En nuevas versiones es un objeto tipo dict, no devuelve listas por defecto
         params = st.query_params
         code = params.get("code")
         state = params.get("state")
@@ -228,8 +250,8 @@ def exchange_code_for_token():
         
         # Limpiar la bandera en caso de éxito
         st.session_state["is_exchanging_token"] = False
-        st.query_params.clear() # Limpiar URL
-        st.rerun() 
+        st.query_params.clear() 
+        st.rerun()
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
@@ -240,16 +262,15 @@ def exchange_code_for_token():
 
 
 # ============================================================
-# Gemini 2.0 con búsqueda en internet (REVERTIDO A PROMPT ÚNICO)
+# Gemini 2.0 con búsqueda en internet
 # ============================================================
-# 🌟 CORRECCIÓN GEMINI: Revertido a formato de prompt de texto único para evitar el error 400.
+# 🌟 CORRECCIÓN GEMINI: Revertido a formato de prompt de texto único
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY,
     }
-    # Payload simple: Envía todo el historial y las instrucciones como texto en 'contents'
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -484,11 +505,10 @@ with conv_col:
             "simpre estas contento jovial y alegre"
             "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."
             "Solo si te preguntan quien es el secretario general de la UMSNH El secretario general de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Javier Cervantes Rodríguez. Asumió el cargo en julio de 2023")
-        # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL (para el error 400)
+        # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL
         full_prompt = sys_prompt + "\n\n--- HISTORIAL DE CONVERSACIÓN ---\n"
         
         # Iterar sobre el historial para concatenar el texto (máx. 10 mensajes)
-        # Se invierte el historial para dar más peso al final de la conversación
         history_text = ""
         # Usamos los últimos 10 mensajes para mantener el contexto
         for msg in st.session_state["history"][-10:]: 
@@ -523,9 +543,9 @@ with conv_col:
         # 8. Guardar respuesta del asistente
         st.session_state["history"].append({"role": "assistant", "content": reply})
         
-        # Bajamos la bandera pero NO borramos el input
+        # Bajamos la bandera (NO USAMOS st.rerun() AQUÍ para evitar la triple respuesta)
         st.session_state["trigger_run"] = False
-        st.rerun()
+        # El script continuará al bloque de "Mostrar historial"
 
     # Mostrar historial
     for msg in reversed(st.session_state["history"][-20:]):
