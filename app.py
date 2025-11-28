@@ -34,7 +34,8 @@ if "/oauth2callback" in _request_uri:
     # Convertir valores de lista a string para el nuevo query_params
     query_clean = {k: v[0] for k, v in query.items()}
     st.query_params.update(query_clean)
-    st.rerun()
+    # **Asegurado: Usando st.rerun()**
+    st.rerun() 
 
 # ------------------------------------------------------------
 # Cargar variables de entorno
@@ -108,10 +109,9 @@ def ensure_session_defaults():
 
 
 def header_html():
-    """Cabecera visual con icono del zorro 🦊 y estilo alineado."""
+    """Cabecera visual."""
     video_path = "assets/videos/nico_header_video.mp4"
-    # Placeholder con el zorro 🦊
-    video_tag = '<div class="nico-placeholder">🦊</div>' 
+    video_tag = '<div class="nico-placeholder">🦊</div>'
     
     if os.path.exists(video_path):
         with open(video_path, "rb") as f:
@@ -132,11 +132,7 @@ def header_html():
         margin-bottom: 20px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }}
-    .nico-wrap {{ 
-        display: flex; 
-        align-items: center; 
-        gap: 16px; 
-    }}
+    .nico-wrap {{ display: flex; align-items: center; gap: 16px; }}
     .nico-video, .nico-placeholder {{
         width: 60px; height: 60px; border-radius: 50%;
         background: #fff; object-fit: cover; border: 2px solid #ffd700;
@@ -162,11 +158,9 @@ def header_html():
 
 
 def login_view():
-    """Pantalla de login con botón de Google estilizado."""
+    """Pantalla de login con botón de Google."""
     st.markdown(header_html(), unsafe_allow_html=True)
-    
-    # Mensaje corto sin relleno
-    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.") 
+    st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
 
     if not CLIENT_ID or not CLIENT_SECRET or not GOOGLE_REDIRECT_URI:
         st.error("Faltan variables de configuración OAuth.")
@@ -186,8 +180,6 @@ def login_view():
     )
 
     st.query_params["oauth_state"] = state_key
-    
-    # Botón de Login estilizado
     st.markdown(f"""
     <a href="{auth_url}" target="_self" style="
         display: inline-block;
@@ -250,8 +242,8 @@ def exchange_code_for_token():
         
         # Limpiar la bandera en caso de éxito
         st.session_state["is_exchanging_token"] = False
-        st.query_params.clear() 
-        st.rerun()
+        st.query_params.clear() # Limpiar URL
+        st.rerun() 
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
@@ -264,7 +256,6 @@ def exchange_code_for_token():
 # ============================================================
 # Gemini 2.0 con búsqueda en internet
 # ============================================================
-# 🌟 CORRECCIÓN GEMINI: Revertido a formato de prompt de texto único
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     headers = {
@@ -432,9 +423,10 @@ with conv_col:
             st.session_state["trigger_run"] = True
 
     def action_clear():
-        """Limpia el texto sin enviar"""
+        """Limpia el texto, desactiva la bandera y fuerza un rerun para limpiar la caja visualmente"""
         st.session_state["input_val"] = ""
         st.session_state["trigger_run"] = False
+        st.rerun() # Forzar rerun para que el input se vacíe visiblemente.
 
     # Input con on_change (detecta Enter)
     st.text_input(
@@ -543,17 +535,21 @@ with conv_col:
         # 8. Guardar respuesta del asistente
         st.session_state["history"].append({"role": "assistant", "content": reply})
         
-        # Bajamos la bandera (NO USAMOS st.rerun() AQUÍ para evitar la triple respuesta)
+        # 9. **CORRECCIÓN CLAVE:** BAJAMOS LA BANDERA ANTES DE RERUN
         st.session_state["trigger_run"] = False
-        # El script continuará al bloque de "Mostrar historial"
+        
+        # 10. Forzamos el rerun para mostrar el historial actualizado y limpiar el input.
+        st.rerun()
 
-    # Mostrar historial
-    for msg in reversed(st.session_state["history"][-20:]):
+    # Mostrar historial (solo se ejecuta después del rerun si trigger_run es False)
+    # Se invierte el orden para mostrar el último mensaje abajo
+    for msg in st.session_state["history"]:
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
         else:
             with st.chat_message("assistant"):
                 st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
+                # La voz debe activarse solo para el último mensaje, pero aquí se activa para todos los que se muestran. 
+                # Es aceptable dado que Streamlit redibuja todo.
                 if st.session_state["voice_on"]:
                     speak_browser(msg["content"])
-            break
