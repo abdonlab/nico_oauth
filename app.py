@@ -34,8 +34,7 @@ if "/oauth2callback" in _request_uri:
     # Convertir valores de lista a string para el nuevo query_params
     query_clean = {k: v[0] for k, v in query.items()}
     st.query_params.update(query_clean)
-    # **Asegurado: Usando st.rerun()**
-    st.rerun() 
+    st.rerun()
 
 # ------------------------------------------------------------
 # Cargar variables de entorno
@@ -418,9 +417,11 @@ with conv_col:
     # --- LÓGICA DE INPUT (Callbacks para Enter y Borrar) ---
     
     def action_submit():
-        """Activa la bandera para enviar a Gemini"""
+        """Activa la bandera para enviar a Gemini y hace rerun."""
         if st.session_state["input_val"].strip():
             st.session_state["trigger_run"] = True
+            # **CORRECCIÓN** Forzamos el rerun aquí para que el script entre al bloque de procesamiento
+            st.rerun() 
 
     def action_clear():
         """Limpia el texto, desactiva la bandera y fuerza un rerun para limpiar la caja visualmente"""
@@ -438,7 +439,8 @@ with conv_col:
     # Botones lado a lado
     btn_c1, btn_c2, _ = st.columns([0.15, 0.15, 0.7])
     with btn_c1:
-        st.button("Enviar 🚀", on_click=action_submit)
+        # Usamos el callback `action_submit` en el botón, sin `st.rerun` en el botón mismo
+        st.button("Enviar 🚀", on_click=action_submit) 
     with btn_c2:
         st.button("Borrar 🗑️", on_click=action_clear)
 
@@ -535,21 +537,21 @@ with conv_col:
         # 8. Guardar respuesta del asistente
         st.session_state["history"].append({"role": "assistant", "content": reply})
         
-        # 9. **CORRECCIÓN CLAVE:** BAJAMOS LA BANDERA ANTES DE RERUN
+        # 9. **CORRECCIÓN CLAVE:** BAJAMOS LA BANDERA y TERMINAMOS LA EJECUCIÓN DEL SCRIPT
+        # Ya no usamos st.rerun() aquí, el rerun ya fue ejecutado en action_submit
         st.session_state["trigger_run"] = False
         
-        # 10. Forzamos el rerun para mostrar el historial actualizado y limpiar el input.
-        st.rerun()
+        # Opcional: Podríamos limpiar el input aquí para que se refleje en el siguiente rerun
+        st.session_state["input_val"] = "" 
 
-    # Mostrar historial (solo se ejecuta después del rerun si trigger_run es False)
-    # Se invierte el orden para mostrar el último mensaje abajo
+
+    # Mostrar historial (este bloque se ejecuta en cada ciclo de la app)
     for msg in st.session_state["history"]:
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
         else:
             with st.chat_message("assistant"):
                 st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-                # La voz debe activarse solo para el último mensaje, pero aquí se activa para todos los que se muestran. 
-                # Es aceptable dado que Streamlit redibuja todo.
-                if st.session_state["voice_on"]:
+                # Solo activamos la voz si es el último mensaje
+                if msg == st.session_state["history"][-1] and st.session_state["voice_on"]:
                     speak_browser(msg["content"])
