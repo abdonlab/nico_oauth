@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 # ------------------------------------------------------------
 # Configuración inicial de Streamlit
 # ------------------------------------------------------------
+# 🎯 CORRECCIÓN DE SINTAXIS (Se eliminan caracteres invisibles U+00A0)
 st.set_page_config(
     page_title="NICO | Asistente Virtual UMSNH",
     page_icon="🦊",
@@ -178,29 +179,15 @@ def login_view():
         state=state_key,
     )
 
+    # st.query_params para versiones nuevas
     st.query_params["oauth_state"] = state_key
-    st.markdown(f"""
-    <a href="{auth_url}" target="_self" style="
-        display: inline-block;
-        background-color: #4285F4; /* Azul Google */
-        color: white;
-        padding: 12px 24px;
-        text-decoration: none;
-        border-radius: 6px;
-        font-family: sans-serif;
-        font-weight: bold;
-        font-size: 16px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        margin-top: 10px;
-    ">
-        🔐 Iniciar sesión con Google
-    </a>
-    """, unsafe_allow_html=True)
+    st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 
 def exchange_code_for_token():
     """Intercambiar el código OAuth por tokens y obtener perfil."""
     try:
+        # En nuevas versiones es un objeto tipo dict, no devuelve listas por defecto
         params = st.query_params
         code = params.get("code")
         state = params.get("state")
@@ -253,14 +240,16 @@ def exchange_code_for_token():
 
 
 # ============================================================
-# Gemini 2.0 con búsqueda en internet
+# Gemini 2.0 con búsqueda en internet (REVERTIDO A PROMPT ÚNICO)
 # ============================================================
+# 🌟 CORRECCIÓN GEMINI: Revertido a formato de prompt de texto único para evitar el error 400.
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY,
     }
+    # Payload simple: Envía todo el historial y las instrucciones como texto en 'contents'
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -417,17 +406,14 @@ with conv_col:
     # --- LÓGICA DE INPUT (Callbacks para Enter y Borrar) ---
     
     def action_submit():
-        """Activa la bandera para enviar a Gemini y hace rerun."""
+        """Activa la bandera para enviar a Gemini"""
         if st.session_state["input_val"].strip():
             st.session_state["trigger_run"] = True
-            # **CORRECCIÓN** Forzamos el rerun aquí para que el script entre al bloque de procesamiento
-            st.rerun() 
 
     def action_clear():
-        """Limpia el texto, desactiva la bandera y fuerza un rerun para limpiar la caja visualmente"""
+        """Limpia el texto sin enviar"""
         st.session_state["input_val"] = ""
         st.session_state["trigger_run"] = False
-        st.rerun() # Forzar rerun para que el input se vacíe visiblemente.
 
     # Input con on_change (detecta Enter)
     st.text_input(
@@ -439,8 +425,7 @@ with conv_col:
     # Botones lado a lado
     btn_c1, btn_c2, _ = st.columns([0.15, 0.15, 0.7])
     with btn_c1:
-        # Usamos el callback `action_submit` en el botón, sin `st.rerun` en el botón mismo
-        st.button("Enviar 🚀", on_click=action_submit) 
+        st.button("Enviar 🚀", on_click=action_submit)
     with btn_c2:
         st.button("Borrar 🗑️", on_click=action_clear)
 
@@ -499,10 +484,11 @@ with conv_col:
             "simpre estas contento jovial y alegre"
             "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."
             "Solo si te preguntan quien es el secretario general de la UMSNH El secretario general de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Javier Cervantes Rodríguez. Asumió el cargo en julio de 2023")
-        # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL
+        # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL (para el error 400)
         full_prompt = sys_prompt + "\n\n--- HISTORIAL DE CONVERSACIÓN ---\n"
         
         # Iterar sobre el historial para concatenar el texto (máx. 10 mensajes)
+        # Se invierte el historial para dar más peso al final de la conversación
         history_text = ""
         # Usamos los últimos 10 mensajes para mantener el contexto
         for msg in st.session_state["history"][-10:]: 
@@ -537,21 +523,17 @@ with conv_col:
         # 8. Guardar respuesta del asistente
         st.session_state["history"].append({"role": "assistant", "content": reply})
         
-        # 9. **CORRECCIÓN CLAVE:** BAJAMOS LA BANDERA y TERMINAMOS LA EJECUCIÓN DEL SCRIPT
-        # Ya no usamos st.rerun() aquí, el rerun ya fue ejecutado en action_submit
+        # Bajamos la bandera pero NO borramos el input
         st.session_state["trigger_run"] = False
-        
-        # Opcional: Podríamos limpiar el input aquí para que se refleje en el siguiente rerun
-        st.session_state["input_val"] = "" 
+        st.rerun()
 
-
-    # Mostrar historial (este bloque se ejecuta en cada ciclo de la app)
-    for msg in st.session_state["history"]:
+    # Mostrar historial
+    for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
         else:
             with st.chat_message("assistant"):
                 st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-                # Solo activamos la voz si es el último mensaje
-                if msg == st.session_state["history"][-1] and st.session_state["voice_on"]:
+                if st.session_state["voice_on"]:
                     speak_browser(msg["content"])
+            break
