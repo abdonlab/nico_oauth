@@ -464,13 +464,13 @@ with conv_col:
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
             f"El usuario se llama {first_name}. "
             "Tu objetivo principal es proporcionar información precisa, actualizada y relevante de la UMSNH. "
-            "**OBLIGACIÓN DE BÚSQUEDA WEB:** Para preguntas sobre **noticias recientes, contactos, números de teléfono, nombres o datos de funcionarios actuales (que no sean la Rectora), resúmenes de prensa, o cualquier información que pueda haber cambiado después del 2023, DEBES UTILIZAR LA BÚSQUEDA WEB (GoGoGoogleSearchh "     
+            "ANTE CUALQUIER PREGUNTA SOBRE NOTICIAS, CONTACTOS, O ACTUALIDAD (DESPUÉS DE 2023), DEBES EJECUTAR LA HERRAMIENTA DE BÚSQUEDA WEB DE GOOGLE (GoGoGoogleSearchh)"
+            "**OBLIGACIÓN DE BÚSQUEDA WEB:** Para preguntas sobre **noticias recientes, contactos, números de teléfono, nombres o datos de funcionarios actuales (que no sean la Rectora), resúmenes de prensa, o cualquier información que pueda haber cambiado después del 2023, DEBES UTILIZAR LA BÚSQUEDA WEB (GoGoGoogleSearchh) "     
             "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc. "
             "NO generes listas con guiones viñetas asteriscos o puntos. "
             "Responde siempre en español de mexico (o en purépecha/inglés si es solicitado) de forma clara, breve y amable. "
             "**IMPORTANTE: NO saludes al inicio de tu respuesta (ej. no digas 'Hola', 'Buenos días', 'Qué tal {nombre}'). El sistema ya saluda por ti la primera vez. Comienza directamente con la información solicitada o la respuesta a la pregunta.**"
-            "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n"
-            "IMPORTANTE: No uses negritas (*texto*) ni formato markdown pesado en tus respuestas. Escribe solo texto plano.\n\n"
+            "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n "
             "se responsable e incluyente y eficiente y ético"
             "Usa la búsqueda web para información actualizada. Prioriza sitios *.umich.mx."
             "- https://www.umich.mx\n"
@@ -487,11 +487,11 @@ with conv_col:
         # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL (para el error 400)
         full_prompt = sys_prompt + "\n\n--- HISTORIAL DE CONVERSACIÓN ---\n"
         
-        # Iterar sobre el historial para concatenar el texto (máx. 10 mensajes)
+        # Iterar sobre el historial para concatenar el texto (máx. 5 mensajes)
         # Se invierte el historial para dar más peso al final de la conversación
         history_text = ""
-        # Usamos los últimos 10 mensajes para mantener el contexto
-        for msg in st.session_state["history"][-10:]: 
+        # Usamos los últimos 5 mensajes para mantener el contexto
+        for msg in st.session_state["history"][-5:]: 
             role = "Asistente" if msg["role"] == "assistant" else "Usuario"
             content = msg["content"]
             
