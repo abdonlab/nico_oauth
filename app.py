@@ -474,7 +474,7 @@ with conv_col:
             "se responsable e incluyente y eficiente y ético"
             "Usa la búsqueda web para información actualizada. Prioriza sitios *.umich.mx."
             "- https://www.umich.mx\n"
-            "para ultimas noticias busca en internet y en las paginas oficiales de la umsnh.mx crea un breve resumen y al final recomineda buscar en la pagina oficial https://www.umsnh.com/ o en  https://www.gacetanicolaita.umich.mx/"
+            "para ultimas, o si te preguntan sobre las ultimas  noticias busca en internet y en las paginas oficiales de la umsnh.mx crea un breve resumen y al final recomineda buscar en la pagina oficial https://www.umsnh.com/ o en  https://www.gacetanicolaita.umich.mx/"
             "para nombres de funcionarios busca en https://umich.mx/unidades-administrativas/"
             "-https://www.gacetanicolaita.umich.mx/n"
             "-https://umich.mx/unidades-administrativas/n"
