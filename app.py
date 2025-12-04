@@ -462,7 +462,7 @@ with conv_col:
         # 4. Prompt del Sistema (CONSTANTE)
         sys_prompt = (
             "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
-            "El usuario se llama {first_name}. "
+            f"El usuario se llama {first_name}. "
             "se responsable e incluyente y eficiente y ético"    
             "Tuu personalidad es alegre y jovial"
             "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc.  "
