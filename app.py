@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 # ------------------------------------------------------------
 # Configuración inicial de Streamlit
 # ------------------------------------------------------------
+# 🎯 CORRECCIÓN DE SINTAXIS (Se eliminan caracteres invisibles U+00A0)
 st.set_page_config(
     page_title="NICO | Asistente Virtual UMSNH",
     page_icon="🦊",
@@ -57,9 +58,8 @@ SCOPES = [
 ]
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
-# 🚀 CAMBIO CRÍTICO: Usar modelo compatible con Google Search Grounding
 GEMINI_MODEL = st.secrets.get(
-    "GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.5-flash") 
+    "GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-preview-02-05")
 )
 
 # ============================================================
@@ -179,29 +179,15 @@ def login_view():
         state=state_key,
     )
 
+    # st.query_params para versiones nuevas
     st.query_params["oauth_state"] = state_key
-    st.markdown(f"""
-    <a href="{auth_url}" target="_self" style="
-        display: inline-block;
-        background-color: #4285F4; /* Azul Google */
-        color: white;
-        padding: 12px 24px;
-        text-decoration: none;
-        border-radius: 6px;
-        font-family: sans-serif;
-        font-weight: bold;
-        font-size: 16px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        margin-top: 10px;
-    ">
-        🔐 Iniciar sesión con Google
-    </a>
-    """, unsafe_allow_html=True)
+    st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 
 def exchange_code_for_token():
     """Intercambiar el código OAuth por tokens y obtener perfil."""
     try:
+        # En nuevas versiones es un objeto tipo dict, no devuelve listas por defecto
         params = st.query_params
         code = params.get("code")
         state = params.get("state")
@@ -211,9 +197,11 @@ def exchange_code_for_token():
     if not code or not state:
         return
 
+    # 🌟 CORRECCIÓN AUTH: Bloquear la doble ejecución (Previene invalid_grant)
     if st.session_state.get("is_exchanging_token"):
         return
 
+    # Establecer la bandera antes de intentar el intercambio
     st.session_state["is_exchanging_token"] = True
 
     try:
@@ -238,27 +226,30 @@ def exchange_code_for_token():
             "picture": idinfo.get("picture"),
         }
         
+        # Limpiar la bandera en caso de éxito
         st.session_state["is_exchanging_token"] = False
-        st.query_params.clear() 
+        st.query_params.clear() # Limpiar URL
         st.rerun() 
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
+        # Limpiar la bandera y la URL en caso de fallo
         st.session_state["is_exchanging_token"] = False
         st.query_params.clear()
         st.rerun()
 
 
 # ============================================================
-# Gemini 2.0 con búsqueda en internet
+# Gemini 2.0 con búsqueda en internet (REVERTIDO A PROMPT ÚNICO)
 # ============================================================
+# 🌟 CORRECCIÓN GEMINI: Revertido a formato de prompt de texto único para evitar el error 400.
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
-    # Usamos el modelo actualizado (gemini-2.5-flash)
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY,
     }
+    # Payload simple: Envía todo el historial y las instrucciones como texto en 'contents'
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -266,7 +257,7 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
             "topP": float(top_p),
             "maxOutputTokens": int(max_tokens),
         },
-        "tools": [{"google_search": {}}], # Activación de la búsqueda web
+        "tools": [{"google_search": {}}],
     }
 
     try:
@@ -279,7 +270,6 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
                 text += part.get("text", "")
         return text.strip() or "No obtuve respuesta del modelo."
     except Exception as e:
-        st.error(f"Error en la llamada a Gemini (API): {e}")
         return f"⚠️ Error con Gemini: {e}"
 
 
@@ -353,110 +343,6 @@ def speak_browser(text: str):
 # Lógica principal de la app
 # ============================================================
 
-def process_chat_message():
-    """
-    Función que maneja la lógica de envío, procesamiento, y llama a st.rerun
-    al final para actualizar la interfaz.
-    """
-    user_msg = st.session_state["input_val"]
-    
-    if not user_msg.strip():
-        return
-
-    # 1. Guardar mensaje de usuario
-    st.session_state["history"].append({"role": "user", "content": user_msg})
-
-    # 2. **CORRECCIÓN CLAVE:** Limpiamos el input_val inmediatamente 
-    # para que en el siguiente rerun ya esté vacío, evitando re-envíos.
-    st.session_state["input_val"] = ""
-
-    # 3. Video Aleatorio
-    try:
-        video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
-        if video_files:
-            chosen = random.choice(video_files)
-            video_path = os.path.join("assets/videos", chosen)
-            with open(video_path, "rb") as f:
-                b64 = base64.b64encode(f.read()).decode("utf-8")
-            
-            html_video = f"""
-            <video width="220" loop muted playsinline style="border-radius:12px;">
-                <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-            </video>
-            """
-            st.session_state["current_video"] = html_video
-            # Nota: El contenedor de video se actualizará en la próxima ejecución del script
-    except Exception as e:
-        st.warning(f"Error al cargar video: {e}")
-
-    # 4. Preparar Prompt
-    full_name = st.session_state['profile'].get('name', 'Usuario')
-    first_name = full_name.split(' ')[0] if full_name else 'Amigo'
-    
-    # Mantenemos el prompt del sistema sin cambios
-    sys_prompt = (
-        "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
-        f"El usuario se llama {first_name}. "
-        "Tu objetivo principal es proporcionar información precisa, actualizada y relevante de la UMSNH. "
-        "**OBLIGACIÓN DE BÚSQUEDA WEB:** Para preguntas sobre **noticias recientes, contactos, números de teléfono, nombres o datos de funcionarios actuales (que no sean la Rectora), resúmenes de prensa, o cualquier información que pueda haber cambiado después del 2023, DEBES UTILIZAR LA BÚSQUEDA WEB (GoGoGoogleSearchh "     
-        "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc. "
-        "NO generes listas con guiones viñetas asteriscos o puntos. "
-        "Responde siempre en español de mexico (o en purépecha/inglés si es solicitado) de forma clara, breve y amable. "
-        "**IMPORTANTE: NO saludes al inicio de tu respuesta (ej. no digas 'Hola', 'Buenos días', 'Qué tal {nombre}'). El sistema ya saluda por ti la primera vez. Comienza directamente con la información solicitada o la respuesta a la pregunta.**"
-        "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n"
-        "IMPORTANTE: No uses negritas (*texto*) ni formato markdown pesado en tus respuestas. Escribe solo texto plano.\n\n"
-        "se responsable e incluyente y eficiente y ético"
-        "Usa la búsqueda web para información actualizada. Prioriza sitios *.umich.mx."
-        "- https://www.umich.mx\n"
-        "para ultimas, o si te preguntan sobre las ultimas  noticias busca en internet y en las paginas oficiales de la umsnh.mx crea un breve resumen y al final recomineda buscar en la pagina oficial https://www.umsnh.com/ o en  https://www.gacetanicolaita.umich.mx/"
-        "para nombres de funcionarios busca en https://umich.mx/unidades-administrativas/"
-        "-https://www.gacetanicolaita.umich.mx/n"
-        "-https://umich.mx/unidades-administrativas/n"
-        "- https://www.dce.umich.mx\n"
-        "- https://siia.umich.mx\n"
-        "cita las fuentes de la respuesta"
-        "simpre estas contento jovial y alegre"
-        "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."
-        "Solo si te preguntan quien es el secretario general de la UMSNH El secretario general de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Javier Cervantes Rodríguez. Asumió el cargo en julio de 2023")
-
-    full_prompt = sys_prompt + "\n\n--- HISTORIAL DE CONVERSACIÓN ---\n"
-    
-    # Iterar sobre el historial para concatenar el texto (máx. 10 mensajes)
-    history_text = ""
-    for msg in st.session_state["history"][-10:]: 
-        role = "Asistente" if msg["role"] == "assistant" else "Usuario"
-        content = msg["content"]
-        if not st.session_state["greeted"] and content.startswith(f"¡Hola {first_name}!") and msg["role"] == "assistant":
-            continue 
-        history_text += f"{role}: {content}\n"
-    
-    full_prompt += history_text
-    full_prompt += f"\n--- FIN DEL HISTORIAL ---\n\nÚltimo mensaje del Usuario: {user_msg}"
-
-    # 5. Llamar a Gemini (Esta es la parte lenta)
-    # Mostramos un spinner durante la búsqueda/generación
-    with st.spinner("Buscando en la web y generando respuesta..."):
-        reply_raw = gemini_generate(
-            full_prompt,
-            st.session_state["temperature"],
-            st.session_state["top_p"],
-            st.session_state["max_tokens"],
-        )
-    
-    # 6. Saludo Único
-    if not st.session_state["greeted"]:
-        saludo = f"¡Hola {first_name}! Soy NICO, tu asistente virtual.\n\n"
-        reply = saludo + reply_raw
-        st.session_state["greeted"] = True
-    else:
-        reply = reply_raw
-
-    # 7. Guardar respuesta del asistente
-    st.session_state["history"].append({"role": "assistant", "content": reply})
-    
-    # 8. Forzar rerun para mostrar la respuesta y el input vacío
-    st.rerun()
-
 ensure_session_defaults()
 exchange_code_for_token()
 
@@ -473,10 +359,8 @@ conv_col, video_col = st.columns([0.7, 0.3])
 with video_col:
     video_container = st.empty()
     
-    # Lógica para mostrar/inicializar el video 
-    if st.session_state["current_video"]:
-        video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
-    elif not st.session_state["current_video"]:
+    # Mostrar video actual o generar uno inicial
+    if not st.session_state["current_video"]:
         try:
             video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
             if video_files:
@@ -490,12 +374,13 @@ with video_col:
                     <source src="data:video/mp4;base64,{b64}" type="video/mp4">
                 </video>
                 """
-                video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
         except: pass
-
+            
+    if st.session_state["current_video"]:
+        video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
 
 with conv_col:
-    # Barra superior de controles (sin cambios)
+    # Barra superior de controles
     c1, c2, c3 = st.columns([0.15, 0.15, 0.7])
     with c1:
         if st.button("🎙️ Voz: " + ("ON" if st.session_state["voice_on"] else "OFF")):
@@ -520,36 +405,132 @@ with conv_col:
 
     # --- LÓGICA DE INPUT (Callbacks para Enter y Borrar) ---
     
-    def action_clear():
-        """Limpia el texto y fuerza un rerun para limpiar la caja visualmente"""
-        st.session_state["input_val"] = ""
-        st.rerun() 
+    def action_submit():
+        """Activa la bandera para enviar a Gemini"""
+        if st.session_state["input_val"].strip():
+            st.session_state["trigger_run"] = True
 
-    # Input con on_change. Al presionar Enter, se llama a process_chat_message()
+    def action_clear():
+        """Limpia el texto sin enviar"""
+        st.session_state["input_val"] = ""
+        st.session_state["trigger_run"] = False
+
+    # Input con on_change (detecta Enter)
     st.text_input(
         "Escribe tu pregunta:", 
         key="input_val", 
-        on_change=process_chat_message # Llama a la función principal de chat
+        on_change=action_submit
     )
 
     # Botones lado a lado
     btn_c1, btn_c2, _ = st.columns([0.15, 0.15, 0.7])
     with btn_c1:
-        # El botón también llama a process_chat_message
-        st.button("Enviar 🚀", on_click=process_chat_message) 
+        st.button("Enviar 🚀", on_click=action_submit)
     with btn_c2:
         st.button("Borrar 🗑️", on_click=action_clear)
 
-    # Mostrar historial (Modificado para mostrar el último mensaje con voz)
-    for i, msg in enumerate(st.session_state["history"]):
+    # Procesamiento si se activó la bandera
+    if st.session_state["trigger_run"]:
+        user_msg = st.session_state["input_val"]
+        
+        # 1. Guardar mensaje de usuario
+        st.session_state["history"].append({"role": "user", "content": user_msg})
+
+        # 2. Video Aleatorio
+        try:
+            video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
+            if video_files:
+                chosen = random.choice(video_files)
+                video_path = os.path.join("assets/videos", chosen)
+                with open(video_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode("utf-8")
+                
+                html_video = f"""
+                <video width="220" loop muted playsinline style="border-radius:12px;">
+                    <source src="data:video/mp4;base64,{b64}" type="video/mp4">
+                </video>
+                """
+                st.session_state["current_video"] = html_video
+                video_container.markdown(html_video, unsafe_allow_html=True)
+        except Exception as e:
+            st.warning(f"Video error: {e}")
+
+        # 3. Obtener Nombre (Primer nombre)
+        full_name = st.session_state['profile'].get('name', 'Usuario')
+        first_name = full_name.split(' ')[0] if full_name else 'Amigo'
+
+        # 4. Prompt del Sistema (CONSTANTE)
+        sys_prompt = (
+            "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
+            f"El usuario se llama {first_name}. "
+            "se responsable e incluyente y eficiente y ético"    
+            "Tuu personalidad es alegre y jovial"
+            "NO uses negritas, NO uses Markdown, NO uses símbolos como **, *, _, #, ~~, etc.  "
+            "NO generes listas con guiones viñetas asteriscos o puntos. "
+            "Tu objetivo principal es proporcionar información precisa, actualizada y relevante de la UMSNH. "
+            "ANTE CUALQUIER PREGUNTA SOBRE NOTICIAS, CONTACTOS, O ACTUALIDAD (DESPUÉS DE 2023), DEBES EJECUTAR LA HERRAMIENTA DE BÚSQUEDA WEB DE GOOGLE (GoGoGoogleSearchh)"                                                                                                       
+            "Responde siempre en español de mexico (o en purépecha/inglés si es solicitado) de forma clara, breve y amable. "
+            "**IMPORTANTE: NO saludes al inicio de tu respuesta (ej. no digas 'Hola', 'Buenos días', 'Qué tal {nombre}'). El sistema ya saluda por ti la primera vez. Comienza directamente con la información solicitada o la respuesta a la pregunta.**"
+            "Usa su nombre ocasionalmente en la conversación para que suene natural, pero no en cada frase.\n "
+            "para nombres de funcionarios busca la web en https://umich.mx/unidades-administrativas/"       
+            "Prioriza sitios *.umich.mx."
+            "- https://www.umich.mx\n"
+            "-https://www.gacetanicolaita.umich.mx/n"
+            "-https://umich.mx/unidades-administrativas/n"
+            "- https://www.dce.umich.mx\n"
+            "- https://siia.umich.mx\n"
+            "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."
+            "Solo si te preguntan quien es el secretario general de la UMSNH El secretario general de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Javier Cervantes Rodríguez. Asumió el cargo en julio de 2023")
+        # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL (para el error 400)
+        full_prompt = sys_prompt + "\n\n--- HISTORIAL DE CONVERSACIÓN ---\n"
+        
+        # Iterar sobre el historial para concatenar el texto (máx. 5 mensajes)
+        # Se invierte el historial para dar más peso al final de la conversación
+        history_text = ""
+        # Usamos los últimos 5 mensajes para mantener el contexto
+        for msg in st.session_state["history"][-5:]: 
+            role = "Asistente" if msg["role"] == "assistant" else "Usuario"
+            content = msg["content"]
+            
+            # Omitir el saludo inyectado en el historial para no confundir al modelo
+            if not st.session_state["greeted"] and content.startswith(f"¡Hola {first_name}!") and msg["role"] == "assistant":
+                continue 
+            
+            history_text += f"{role}: {content}\n"
+        
+        full_prompt += history_text
+        full_prompt += f"\n--- FIN DEL HISTORIAL ---\n\nÚltimo mensaje del Usuario: {user_msg}"
+        
+        # 6. Llamar a la función gemini_generate con el prompt de texto único
+        reply_raw = gemini_generate(
+            full_prompt,
+            st.session_state["temperature"],
+            st.session_state["top_p"],
+            st.session_state["max_tokens"],
+        )
+        
+        # 7. Saludo Único (Solo la primera vez)
+        if not st.session_state["greeted"]:
+            saludo = f"¡Hola {first_name}! Soy NICO, tu asistente virtual.\n\n"
+            reply = saludo + reply_raw
+            st.session_state["greeted"] = True
+        else:
+            reply = reply_raw
+
+        # 8. Guardar respuesta del asistente
+        st.session_state["history"].append({"role": "assistant", "content": reply})
+        
+        # Bajamos la bandera pero NO borramos el input
+        st.session_state["trigger_run"] = False
+        st.rerun()
+
+    # Mostrar historial
+    for msg in reversed(st.session_state["history"][-20:]):
         if msg["role"] == "user":
             st.chat_message("user").markdown(msg["content"])
         else:
             with st.chat_message("assistant"):
                 st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-                
-                # Activamos la voz SOLO para el último mensaje del asistente.
-                if i == len(st.session_state["history"]) - 1 and st.session_state["voice_on"]:
-                    # Usamos un pequeño delay para que la interfaz se cargue primero
-                    time.sleep(0.5) 
+                if st.session_state["voice_on"]:
                     speak_browser(msg["content"])
+            break
