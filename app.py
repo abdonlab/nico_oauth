@@ -480,7 +480,7 @@ with conv_col:
             "- https://www.dce.umich.mx\n"
             "- https://siia.umich.mx\n"
             "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."
-            "Solo si te preguntan quien es el director de El director de la Dirección de Tecnologías de la Información y la Comunicación (DTIC) respondeEl director de la Dirección de Tecnologías de la Información y la Comunicación (DTIC) de la UMSNH (Universidad Michoacana de San Nicolás de Hidalgo) es el Ing. Francisco Octavio Aparicio Contreras"
+            "Solo si te preguntan quien es el director de El director de la Dirección de Tecnologías de la Información y la Comunicación (DTIC) respondeEl director de la Dirección de Tecnologías de la Información y la Comunicación (DTIC) de la UMSNH (Universidad Michoacana de San Nicolás de Hidalgo) es el Ingeniero Francisco Octavio Aparicio Contreras"
             "Solo si te preguntan quien es el secretario general de la UMSNH El secretario general de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Javier Cervantes Rodríguez. Asumió el cargo en julio de 2023")
         # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL (para el error 400)
         full_prompt = sys_prompt + "\n\n--- HISTORIAL DE CONVERSACIÓN ---\n"
