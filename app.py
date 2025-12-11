@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 # ------------------------------------------------------------
 # Configuración inicial de Streamlit
 # ------------------------------------------------------------
+# 🎯 CORRECCIÓN DE SINTAXIS (Se eliminan caracteres invisibles U+00A0)
 st.set_page_config(
     page_title="NICO | Asistente Virtual UMSNH",
     page_icon="🦊",
@@ -25,12 +26,13 @@ st.set_page_config(
 )
 
 # ------------------------------------------------------------
-# FIX redirección /oauth2callback
+# FIX redirección /oauth2callback (al inicio del archivo)
 # ------------------------------------------------------------
 _request_uri = os.environ.get("STREAMLIT_SERVER_REQUEST_URI", "")
 if "/oauth2callback" in _request_uri:
     parsed = urllib.parse.urlparse(_request_uri)
     query = urllib.parse.parse_qs(parsed.query)
+    # Convertir valores de lista a string para el nuevo query_params
     query_clean = {k: v[0] for k, v in query.items()}
     st.query_params.update(query_clean)
     st.rerun()
@@ -41,8 +43,13 @@ if "/oauth2callback" in _request_uri:
 load_dotenv()
 
 CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", os.getenv("GOOGLE_CLIENT_ID", ""))
-CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", ""))
-GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", os.getenv("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/"))
+CLIENT_SECRET = st.secrets.get(
+    "GOOGLE_CLIENT_SECRET", os.getenv("GOOGLE_CLIENT_SECRET", "")
+)
+GOOGLE_REDIRECT_URI = st.secrets.get(
+    "GOOGLE_REDIRECT_URI",
+    os.getenv("GOOGLE_REDIRECT_URI", "https://nicooapp-umsnh.streamlit.app/"),
+)
 
 SCOPES = [
     "openid",
@@ -51,9 +58,9 @@ SCOPES = [
 ]
 
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
-
-# 🚀 CAMBIO CRÍTICO: Modelo 'gemini-2.5-flash' para que funcione la Búsqueda Web
-GEMINI_MODEL = st.secrets.get("GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
+GEMINI_MODEL = st.secrets.get(
+    "GEMINI_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite-preview-02-05")
+)
 
 # ============================================================
 # Funciones auxiliares
@@ -73,6 +80,7 @@ def get_flow(state=None):
             ],
         }
     }
+
     flow = Flow.from_client_config(
         client_config, scopes=SCOPES, redirect_uri=GOOGLE_REDIRECT_URI
     )
@@ -82,6 +90,7 @@ def get_flow(state=None):
 
 
 def ensure_session_defaults():
+    """Valores por defecto en session_state."""
     st.session_state.setdefault("logged", False)
     st.session_state.setdefault("profile", {})
     st.session_state.setdefault("history", [])
@@ -92,11 +101,15 @@ def ensure_session_defaults():
     st.session_state.setdefault("current_video", None)
     st.session_state.setdefault("open_cfg", False)
     st.session_state.setdefault("greeted", False)
+    # Nuevos para el control de input
     st.session_state.setdefault("input_val", "")
+    st.session_state.setdefault("trigger_run", False)
+    # 🌟 CORRECCIÓN AUTH: Bandera para evitar doble intercambio de token (invalid_grant)
     st.session_state.setdefault("is_exchanging_token", False)
 
 
 def header_html():
+    """Cabecera visual."""
     video_path = "assets/videos/nico_header_video.mp4"
     video_tag = '<div class="nico-placeholder">🦊</div>'
     
@@ -145,6 +158,7 @@ def header_html():
 
 
 def login_view():
+    """Pantalla de login con botón de Google."""
     st.markdown(header_html(), unsafe_allow_html=True)
     st.info("Inicia sesión con tu cuenta de Google para usar **NICO**.")
 
@@ -165,22 +179,15 @@ def login_view():
         state=state_key,
     )
 
+    # st.query_params para versiones nuevas
     st.query_params["oauth_state"] = state_key
-    st.markdown(f"""
-    <a href="{auth_url}" target="_self" style="
-        display: inline-block;
-        background-color: #4285F4; color: white; padding: 12px 24px;
-        text-decoration: none; border-radius: 6px; font-family: sans-serif;
-        font-weight: bold; font-size: 16px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-top: 10px;
-    ">
-        🔐 Iniciar sesión con Google
-    </a>
-    """, unsafe_allow_html=True)
+    st.markdown(f"[🔐 Iniciar sesión con Google]({auth_url})")
 
 
 def exchange_code_for_token():
+    """Intercambiar el código OAuth por tokens y obtener perfil."""
     try:
+        # En nuevas versiones es un objeto tipo dict, no devuelve listas por defecto
         params = st.query_params
         code = params.get("code")
         state = params.get("state")
@@ -190,9 +197,11 @@ def exchange_code_for_token():
     if not code or not state:
         return
 
+    # 🌟 CORRECCIÓN AUTH: Bloquear la doble ejecución (Previene invalid_grant)
     if st.session_state.get("is_exchanging_token"):
         return
 
+    # Establecer la bandera antes de intentar el intercambio
     st.session_state["is_exchanging_token"] = True
 
     try:
@@ -217,27 +226,30 @@ def exchange_code_for_token():
             "picture": idinfo.get("picture"),
         }
         
+        # Limpiar la bandera en caso de éxito
         st.session_state["is_exchanging_token"] = False
-        st.query_params.clear()
+        st.query_params.clear() # Limpiar URL
         st.rerun() 
 
     except Exception as e:
         st.error(f"Error al autenticar: {e}")
+        # Limpiar la bandera y la URL en caso de fallo
         st.session_state["is_exchanging_token"] = False
         st.query_params.clear()
         st.rerun()
 
 
 # ============================================================
-# Gemini (Modelo 2.5 Flash para Búsqueda Web)
+# Gemini 2.0 con búsqueda en internet (REVERTIDO A PROMPT ÚNICO)
 # ============================================================
+# 🌟 CORRECCIÓN GEMINI: Revertido a formato de prompt de texto único para evitar el error 400.
 def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: int) -> str:
-    # Usamos el modelo cargado (debe ser gemini-2.5-flash)
     endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY,
     }
+    # Payload simple: Envía todo el historial y las instrucciones como texto en 'contents'
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -245,7 +257,7 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
             "topP": float(top_p),
             "maxOutputTokens": int(max_tokens),
         },
-        "tools": [{"google_search": {}}], # Activa la búsqueda web
+        "tools": [{"google_search": {}}],
     }
 
     try:
@@ -262,7 +274,9 @@ def gemini_generate(prompt: str, temperature: float, top_p: float, max_tokens: i
 
 
 def speak_browser(text: str):
-    """Voz del Asistente (TTS)."""
+    """
+    Usa la Web Speech API y sincroniza el video.
+    """
     if not text: return
     payload = json.dumps(text)
 
@@ -283,6 +297,7 @@ def speak_browser(text: str):
             const utter = new SpeechSynthesisUtterance(text);
             const voices = synth.getVoices() || [];
             let chosen = null;
+            
             const preferNames = ["miguel", "diego", "jorge", "pablo", "male", "hombre"];
             for (const v of voices) {{
                 const name = (v.name || "").toLowerCase();
@@ -300,10 +315,13 @@ def speak_browser(text: str):
                 }}
             }}
             if (chosen) utter.voice = chosen;
+
             utter.rate = 0.95;
             utter.pitch = 0.65;
+
             utter.onstart = () => {{ const v = findVideo(); if (v) v.play(); }};
             utter.onend = () => {{ const v = findVideo(); if (v) v.pause(); }};
+
             synth.speak(utter);
         }}
 
@@ -321,148 +339,8 @@ def speak_browser(text: str):
     components.html(js_code, height=0)
 
 
-def listen_browser():
-    """
-    Escucha al usuario (STT) y escribe en el input.
-    """
-    js_code = """
-    <script>
-    (function() {
-        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-        
-        if (!recognition) {
-            alert('❌ Tu navegador no soporta reconocimiento de voz.');
-            return;
-        }
-
-        recognition.lang = 'es-MX';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-        
-        const inputField = parent.document.querySelector('input[data-testid="stTextInput"]');
-        const speakButton = parent.document.querySelector('.stButton button[title*="Hacer clic"]');
-
-        if (speakButton) {
-            speakButton.innerText = '🔴 Escuchando...';
-            speakButton.style.backgroundColor = '#FF4B4B';
-            speakButton.style.color = '#FFFFFF';
-        }
-
-        recognition.onresult = function(event) {
-            const transcript = event.results[0][0].transcript;
-            
-            if (inputField) {
-                inputField.value = transcript;
-                inputField.dispatchEvent(new Event('input', { bubbles: true }));
-                // Disparar envío automático
-                inputField.dispatchEvent(new Event('change', { bubbles: true })); 
-            }
-        };
-
-        recognition.onspeechend = function() { recognition.stop(); };
-
-        recognition.onend = function() {
-            if (speakButton) {
-                speakButton.innerText = '🎙️ Hablar';
-                speakButton.style.backgroundColor = '';
-                speakButton.style.color = '';
-            }
-        };
-
-        recognition.start();
-    })();
-    </script>
-    """
-    components.html(js_code, height=0)
-
-
 # ============================================================
-# Lógica Principal de Chat (Optimizada para evitar duplicados)
-# ============================================================
-
-def process_chat_message():
-    """
-    Procesa el mensaje del usuario, llama a la API y actualiza el historial.
-    Se asegura de limpiar el input y evita dobles ejecuciones.
-    """
-    user_msg = st.session_state["input_val"]
-    
-    if not user_msg.strip():
-        return
-
-    # 1. Guardar mensaje de usuario
-    st.session_state["history"].append({"role": "user", "content": user_msg})
-
-    # 2. Limpiar input inmediatamente
-    st.session_state["input_val"] = ""
-
-    # 3. Video Aleatorio
-    try:
-        video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
-        if video_files:
-            chosen = random.choice(video_files)
-            video_path = os.path.join("assets/videos", chosen)
-            with open(video_path, "rb") as f:
-                b64 = base64.b64encode(f.read()).decode("utf-8")
-            
-            html_video = f"""
-            <video width="220" loop muted playsinline style="border-radius:12px;">
-                <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-            </video>
-            """
-            st.session_state["current_video"] = html_video
-    except Exception as e:
-        pass # Fallo silencioso del video para no interrumpir
-
-    # 4. Prompt
-    full_name = st.session_state['profile'].get('name', 'Usuario')
-    first_name = full_name.split(' ')[0] if full_name else 'Amigo'
-    
-    sys_prompt = (
-        "Eres NICO, asistente institucional de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH). "
-        f"El usuario se llama {first_name}. "
-        "Tu objetivo es informar de manera precisa, eficiente y alegre. "
-        "**REGLA DE ORO:** Usa Google Search para CUALQUIER dato sobre noticias, convocatorias, fechas o autoridades actuales (post-2023). "
-        "NO uses negritas (**texto**), ni markdown, ni listas con viñetas. Escribe en párrafos naturales. "
-        "No saludes al inicio de cada respuesta, ve directo al grano. "
-        "Prioriza fuentes oficiales como *.umich.mx. "
-    )
-
-    full_prompt = sys_prompt + "\n\n--- HISTORIAL ---\n"
-    # Últimos 5 mensajes para contexto
-    for msg in st.session_state["history"][-5:]: 
-        role = "Asistente" if msg["role"] == "assistant" else "Usuario"
-        content = msg["content"]
-        if not st.session_state["greeted"] and content.startswith(f"¡Hola {first_name}!"):
-            continue 
-        full_prompt += f"{role}: {content}\n"
-    
-    full_prompt += f"\n--- FIN HISTORIAL ---\nUsuario: {user_msg}"
-
-    # 5. Generar Respuesta (con Spinner)
-    with st.spinner("Buscando y generando respuesta..."):
-        reply_raw = gemini_generate(
-            full_prompt,
-            st.session_state["temperature"],
-            st.session_state["top_p"],
-            st.session_state["max_tokens"],
-        )
-    
-    # 6. Saludo inicial si aplica
-    if not st.session_state["greeted"]:
-        saludo = f"¡Hola {first_name}! Soy NICO, tu asistente virtual.\n\n"
-        reply = saludo + reply_raw
-        st.session_state["greeted"] = True
-    else:
-        reply = reply_raw
-
-    # 7. Guardar y Recargar
-    st.session_state["history"].append({"role": "assistant", "content": reply})
-    st.rerun()
-
-
-# ============================================================
-# Ejecución Principal
+# Lógica principal de la app
 # ============================================================
 
 ensure_session_defaults()
@@ -473,89 +351,3 @@ if not st.session_state.get("logged"):
     st.stop()
 
 # Cabecera
-st.markdown(header_html(), unsafe_allow_html=True)
-
-# Layout
-conv_col, video_col = st.columns([0.7, 0.3])
-
-with video_col:
-    video_container = st.empty()
-    if st.session_state["current_video"]:
-        video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
-    elif not st.session_state["current_video"]:
-        # Intento inicial de cargar video
-        try:
-            video_files = [f for f in os.listdir("assets/videos") if f.lower().endswith((".mp4", ".webm"))]
-            if video_files:
-                chosen = random.choice(video_files)
-                with open(os.path.join("assets/videos", chosen), "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode("utf-8")
-                st.session_state["current_video"] = f"""
-                <video width="220" loop muted playsinline style="border-radius:12px;">
-                    <source src="data:video/mp4;base64,{b64}" type="video/mp4">
-                </video>
-                """
-                video_container.markdown(st.session_state["current_video"], unsafe_allow_html=True)
-        except: pass
-
-with conv_col:
-    # Controles Superiores: Voz (TTS), Config, Micrófono (STT), Usuario
-    c1, c2, c3, c4 = st.columns([0.15, 0.15, 0.15, 0.55]) 
-    with c1:
-        if st.button("🎙️ Voz: " + ("ON" if st.session_state["voice_on"] else "OFF"), key="tts_btn"):
-            st.session_state["voice_on"] = not st.session_state["voice_on"]
-            st.rerun() 
-    with c2:
-        if st.button("⚙️ Config", key="cfg_btn"):
-            st.session_state["open_cfg"] = True
-    
-    # BOTÓN DE ESCUCHAR (Micrófono)
-    with c3:
-        # El título ayuda al JS a encontrar el botón
-        if st.button("🎙️ Hablar", help="Hacer clic y empezar a hablar", key="stt_btn"):
-            listen_browser()
-            
-    with c4:
-        st.write(f"Bienvenido, **{st.session_state['profile'].get('name', '').split()[0]}**")
-
-    if st.session_state.get("open_cfg"):
-        with st.expander("Configuración"):
-            st.slider("Temperatura", 0.0, 1.5, key="temperature")
-            st.slider("Top-P", 0.0, 1.0, key="top_p")
-            if st.button("Cerrar Config"):
-                st.session_state["open_cfg"] = False
-                st.rerun()
-
-    st.markdown("### 💬 Conversación")
-
-    # Función para limpiar el input manualmente
-    def action_clear():
-        st.session_state["input_val"] = ""
-        st.rerun() 
-
-    # Input de texto (vinculado a la función de procesamiento)
-    st.text_input(
-        "Escribe tu pregunta:", 
-        key="input_val", 
-        on_change=process_chat_message
-    )
-
-    # Botones de acción
-    btn_c1, btn_c2, _ = st.columns([0.15, 0.15, 0.7])
-    with btn_c1:
-        st.button("Enviar 🚀", on_click=process_chat_message) 
-    with btn_c2:
-        st.button("Borrar 🗑️", on_click=action_clear)
-
-    # Mostrar Historial
-    for i, msg in enumerate(st.session_state["history"]):
-        if msg["role"] == "user":
-            st.chat_message("user").markdown(msg["content"])
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(f"<div class='chat-bubble'>{msg['content']}</div>", unsafe_allow_html=True)
-                
-                # Hablar solo el último mensaje del asistente
-                if i == len(st.session_state["history"]) - 1 and st.session_state["voice_on"]:
-                    time.sleep(0.3) 
-                    speak_browser(msg["content"])
