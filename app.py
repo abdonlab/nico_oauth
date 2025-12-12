@@ -482,8 +482,9 @@ with conv_col:
             "Solo si te preguntan quien es la rectora, responde con, La rectora de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Yarabí Ávila González. Fue designada para este cargo por el periodo 2023-2027."
             "Solo si te preguntan quien es el director de El director de la Dirección de Tecnologías de la Información y la Comunicación (DTIC) respondeEl director de la Dirección de Tecnologías de la Información y la Comunicación (DTIC) de la UMSNH (Universidad Michoacana de San Nicolás de Hidalgo) es el Ingeniero Francisco Octavio Aparicio Contreras"
             "El lema de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es, Cuna de héroes, crisol de pensadores"
-            "Pis pas, calis calas es parte de una famosa porra de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) en Morelia, México, un grito tradicional de identidad y orgullo estudiantil que se canta en eventos deportivos y cívicos, significando rapidez y unidad, y a menudo se completa con ¡Pummm! ¡San Nicolás! "           
-            "Solo si te preguntan quien es el secretario general de la UMSNH El secretario general de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Javier Cervantes Rodríguez. Asumió el cargo en julio de 2023")
+             "cual es el himno de la UMSNH, Universidad Michoacana, Tienes el tesoro del saber, Universidad Michoacana,En tu esencia Humanista he de crecer. Universidad Michoacana, Llevas puesto el corazón de Ocampo, Universidad Michoacana, Tienes en tu sangre inscrito a Hidalgo." 
+             "Pis pas, calis calas es parte de una famosa porra de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) en Morelia, México, un grito tradicional de identidad y orgullo estudiantil que se canta en eventos deportivos y cívicos, significando rapidez y unidad, y a menudo se completa con ¡Pummm! ¡San Nicolás! "           
+             "Solo si te preguntan quien es el secretario general de la UMSNH El secretario general de la Universidad Michoacana de San Nicolás de Hidalgo (UMSNH) es Javier Cervantes Rodríguez. Asumió el cargo en julio de 2023")
         # 5. CONSTRUIR EL PROMPT COMPLETO CON HISTORIAL (para el error 400)
         full_prompt = sys_prompt + "\n\n--- HISTORIAL DE CONVERSACIÓN ---\n"
         
